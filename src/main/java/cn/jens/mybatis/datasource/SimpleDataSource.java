@@ -1,4 +1,4 @@
-package cn.jens.datasource;
+package cn.jens.mybatis.datasource;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
@@ -9,19 +9,17 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.logging.Logger;
 
 /**
- * 数据源配置类
+ * 基于 DriverManager 的非池化数据源。
  *
  * @author YumJens
- * @date 2026-09-05 14:56
  */
 public class SimpleDataSource implements DataSource {
 
+    private final String url;
 
-    private String url;
+    private final String username;
 
-    private String username;
-
-    private String password;
+    private final String password;
 
     public SimpleDataSource(String url, String username, String password) {
         this.url = url;
@@ -40,22 +38,22 @@ public class SimpleDataSource implements DataSource {
     }
 
     @Override
-    public PrintWriter getLogWriter() throws SQLException {
+    public PrintWriter getLogWriter() {
         return DriverManager.getLogWriter();
     }
 
     @Override
-    public void setLogWriter(PrintWriter out) throws SQLException {
+    public void setLogWriter(PrintWriter out) {
         DriverManager.setLogWriter(out);
     }
 
     @Override
-    public void setLoginTimeout(int seconds) throws SQLException {
+    public void setLoginTimeout(int seconds) {
         DriverManager.setLoginTimeout(seconds);
     }
 
     @Override
-    public int getLoginTimeout() throws SQLException {
+    public int getLoginTimeout() {
         return DriverManager.getLoginTimeout();
     }
 
@@ -66,13 +64,14 @@ public class SimpleDataSource implements DataSource {
 
     @Override
     public <T> T unwrap(Class<T> iface) throws SQLException {
-        throw new SQLException(
-                "Not a wrapper"
-        );
+        if (iface.isInstance(this)) {
+            return iface.cast(this);
+        }
+        throw new SQLException("Not a wrapper for " + iface.getName());
     }
 
     @Override
-    public boolean isWrapperFor(Class<?> iface) throws SQLException {
-        return false;
+    public boolean isWrapperFor(Class<?> iface) {
+        return iface.isInstance(this);
     }
 }

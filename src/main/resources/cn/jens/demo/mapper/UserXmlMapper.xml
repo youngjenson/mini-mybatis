@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<mapper namespace="cn.jens.demo.mapper.UserXmlMapper">
+    <resultMap id="userResultMap" type="cn.jens.demo.entity.User">
+        <id property="id" column="user_id"/>
+        <result property="name" column="user_name"/>
+        <result property="age" column="user_age"/>
+    </resultMap>
+
+    <select id="selectList" resultMap="userResultMap">
+        select id as user_id, name as user_name, age as user_age
+        from user
+        order by id
+    </select>
+
+    <select id="selectById" resultMap="userResultMap">
+        select id as user_id, name as user_name, age as user_age
+        from user
+        where id = #{id}
+    </select>
+
+    <select id="selectFreshById" resultMap="userResultMap" flushCache="true">
+        select id as user_id, name as user_name, age as user_age
+        from user
+        where id = #{id}
+    </select>
+
+    <select id="count" resultType="integer">
+        select count(*) from user
+    </select>
+
+    <insert id="insert">
+        insert into user (id, name, age)
+        values (#{id}, #{name}, #{age})
+    </insert>
+
+    <update id="update">
+        update user
+        set name = #{name}, age = #{age}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from user where id = #{id}
+    </delete>
+</mapper>

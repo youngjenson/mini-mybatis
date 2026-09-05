@@ -1,7 +1,11 @@
-package cn.jens.mybatis.mapper;
+package cn.jens.demo.mapper;
 
+import cn.jens.mybatis.annotation.Delete;
+import cn.jens.mybatis.annotation.Insert;
+import cn.jens.mybatis.annotation.Param;
 import cn.jens.mybatis.annotation.Select;
-import cn.jens.mybatis.entity.User;
+import cn.jens.mybatis.annotation.Update;
+import cn.jens.demo.entity.User;
 
 import java.util.List;
 
@@ -12,6 +16,24 @@ import java.util.List;
  */
 public interface UserMapper {
 
-    @Select("select * from user")
+    @Select("select id, name, age from user order by id")
     List<User> selectList();
+
+    @Select("select id, name, age from user where id = #{id}")
+    User selectById(@Param("id") Integer id);
+
+    @Select("select id, name, age from user where name = #{name} and age = #{age}")
+    User selectByNameAndAge(@Param("name") String name, @Param("age") Integer age);
+
+    @Select("select count(*) from user")
+    Integer count();
+
+    @Insert("insert into user (id, name, age) values (#{id}, #{name}, #{age})")
+    int insert(User user);
+
+    @Update("update user set name = #{name}, age = #{age} where id = #{id}")
+    boolean update(User user);
+
+    @Delete("delete from user where id = #{id}")
+    int deleteById(@Param("id") Integer id);
 }

@@ -1,4 +1,4 @@
-package cn.jens.mapping;
+package cn.jens.mybatis.mapping;
 
 /**
  * SQL命令类型

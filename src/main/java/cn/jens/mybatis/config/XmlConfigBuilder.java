@@ -1,9 +1,170 @@
-package cn.jens.config;
+package cn.jens.mybatis.config;
+
+import cn.jens.mybatis.datasource.DataSourceFactory;
+import cn.jens.mybatis.exception.PersistenceException;
+import cn.jens.mybatis.session.LocalCacheScope;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Locale;
+import java.util.Properties;
 
 /**
- * XmlConfigBuilder
+ * 解析 mini-mybatis-config.xml。
+ *
  * @author YumJens
- * @date 2026-09-05 14:37
  */
 public class XmlConfigBuilder {
+
+    public Configuration parse(InputStream inputStream) {
+        if (inputStream == null) {
+            throw new PersistenceException("Configuration input stream must not be null");
+        }
+
+        try {
+            Document document = newDocumentBuilderFactory()
+                    .newDocumentBuilder()
+                    .parse(inputStream);
+            Element root = document.getDocumentElement();
+            Configuration configuration = new Configuration();
+            parseSettings(root, configuration);
+            parseDataSource(root, configuration);
+            parseMappers(root, configuration);
+            return configuration;
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            throw new PersistenceException("Failed to parse mini-MyBatis configuration", e);
+        }
+    }
+
+    private void parseSettings(Element root, Configuration configuration) {
+        NodeList settingsNodes = root.getElementsByTagName("settings");
+        if (settingsNodes.getLength() == 0) {
+            return;
+        }
+
+        Element settings = (Element) settingsNodes.item(0);
+        NodeList settingNodes = settings.getElementsByTagName("setting");
+        for (int index = 0; index < settingNodes.getLength(); index++) {
+            Element setting = (Element) settingNodes.item(index);
+            applySetting(
+                    configuration,
+                    setting.getAttribute("name"),
+                    setting.getAttribute("value")
+            );
+        }
+    }
+
+    private void applySetting(Configuration configuration, String name, String value) {
+        if (!"localCacheScope".equals(name)) {
+            throw new PersistenceException("Unsupported setting: " + name);
+        }
+        try {
+            configuration.setLocalCacheScope(
+                    LocalCacheScope.valueOf(value.toUpperCase(Locale.ROOT))
+            );
+        } catch (IllegalArgumentException e) {
+            throw new PersistenceException("Invalid localCacheScope: " + value, e);
+        }
+    }
+
+    private DocumentBuilderFactory newDocumentBuilderFactory()
+            throws ParserConfigurationException {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        factory.setExpandEntityReferences(false);
+        return factory;
+    }
+
+    private void parseDataSource(Element root, Configuration configuration) {
+        Element dataSource = requiredChild(root, "dataSource");
+        NodeList propertyNodes = dataSource.getElementsByTagName("property");
+        Properties properties = new Properties();
+        for (int index = 0; index < propertyNodes.getLength(); index++) {
+            Element property = (Element) propertyNodes.item(index);
+            properties.setProperty(
+                    property.getAttribute("name"),
+                    property.getAttribute("value")
+            );
+        }
+        configuration.setDataSource(new DataSourceFactory().create(properties));
+    }
+
+    private void parseMappers(Element root, Configuration configuration) {
+        NodeList mappersNodes = root.getElementsByTagName("mappers");
+        if (mappersNodes.getLength() == 0) {
+            return;
+        }
+
+        Element mappers = (Element) mappersNodes.item(0);
+        NodeList children = mappers.getChildNodes();
+        for (int index = 0; index < children.getLength(); index++) {
+            Node child = children.item(index);
+            if (!(child instanceof Element mapper) || !"mapper".equals(mapper.getTagName())) {
+                continue;
+            }
+            parseMapper(mapper, configuration);
+        }
+    }
+
+    private void parseMapper(Element mapper, Configuration configuration) {
+        String className = mapper.getAttribute("class");
+        String resource = mapper.getAttribute("resource");
+        if (!className.isBlank() && !resource.isBlank()) {
+            throw new PersistenceException("Mapper must declare either class or resource, not both");
+        }
+        if (!className.isBlank()) {
+            configuration.addMapper(loadMapperType(className));
+            return;
+        }
+        if (resource.isBlank()) {
+            throw new PersistenceException("Mapper must declare class or resource");
+        }
+
+        try (InputStream inputStream = getResourceAsStream(resource)) {
+            new XmlMapperBuilder(configuration).parse(inputStream, resource);
+        } catch (IOException e) {
+            throw new PersistenceException("Failed to close mapper resource: " + resource, e);
+        }
+    }
+
+    private InputStream getResourceAsStream(String resource) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        InputStream inputStream = classLoader.getResourceAsStream(resource);
+        if (inputStream == null) {
+            throw new PersistenceException("Mapper resource not found: " + resource);
+        }
+        return inputStream;
+    }
+
+    private Class<?> loadMapperType(String className) {
+        if (className == null || className.isBlank()) {
+            throw new PersistenceException("Mapper class must not be blank");
+        }
+        try {
+            return Class.forName(className);
+        } catch (ClassNotFoundException e) {
+            throw new PersistenceException("Mapper class not found: " + className, e);
+        }
+    }
+
+    private Element requiredChild(Element parent, String tagName) {
+        NodeList nodes = parent.getElementsByTagName(tagName);
+        if (nodes.getLength() == 0) {
+            throw new PersistenceException("Missing configuration element: " + tagName);
+        }
+        return (Element) nodes.item(0);
+    }
 }

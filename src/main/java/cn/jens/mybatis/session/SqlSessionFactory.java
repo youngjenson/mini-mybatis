@@ -1,4 +1,4 @@
-package cn.jens.session;
+package cn.jens.mybatis.session;
 
 /**
  * SqlSessionFactory
@@ -6,5 +6,8 @@ package cn.jens.session;
  * @date 2026-09-05 14:33
  */
 public interface SqlSessionFactory {
+
     SqlSession openSession();
+
+    SqlSession openSession(boolean autoCommit);
 }

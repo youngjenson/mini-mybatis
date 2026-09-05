@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourcePerFileMappings">
+    <file url="file://$PROJECT_DIR$/src/test/java/cn/jens/mybatis/MiniMyBatisIntegrationTest.java" value="31c53ff4-1527-4d96-92b5-b2abc5a48135" />
+    <file url="file://$PROJECT_DIR$/src/test/java/cn/jens/mybatis/TestJdbc.java" value="31c53ff4-1527-4d96-92b5-b2abc5a48135" />
+  </component>
+</project>

@@ -1,6 +1,10 @@
-package cn.jens.session;
+package cn.jens.mybatis.session;
 
-import cn.jens.config.Configuration;
+import cn.jens.mybatis.config.Configuration;
+import cn.jens.mybatis.executor.Executor;
+import cn.jens.mybatis.executor.SimpleExecutor;
+import cn.jens.mybatis.transaction.JdbcTransaction;
+import cn.jens.mybatis.transaction.Transaction;
 
 /**
  * 默认的SqlSessionFactory实现
@@ -18,6 +22,13 @@ public class DefaultSqlSessionFactory implements SqlSessionFactory {
 
     @Override
     public SqlSession openSession() {
-        return new DefaultSqlSession(configuration);
+        return openSession(false);
+    }
+
+    @Override
+    public SqlSession openSession(boolean autoCommit) {
+        Transaction transaction = new JdbcTransaction(configuration.getDataSource(), autoCommit);
+        Executor executor = new SimpleExecutor(transaction, configuration.getLocalCacheScope());
+        return new DefaultSqlSession(configuration, executor, autoCommit);
     }
 }

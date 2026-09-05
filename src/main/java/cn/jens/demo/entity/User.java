@@ -1,4 +1,4 @@
-package cn.jens.mybatis.entity;
+package cn.jens.demo.entity;
 
 /**
  * 用户实体类
@@ -35,5 +35,14 @@ public class User {
 
     public void setAge(Integer age) {
         this.age = age;
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", age=" + age +
+                '}';
     }
 }

@@ -1,31 +1,28 @@
-package cn.jens.scripting;
+package cn.jens.mybatis.scripting;
 
 import java.util.List;
 
 /**
- * 绑定SQL
+ * 已将 #{} 转换为 JDBC 占位符的 SQL。
+ *
  * @author YumJens
- * @date 2026-09-05 00:02
  */
-public class BoundSql {
+public final class BoundSql {
 
-    private String sql;
+    private final String sql;
 
-    private List<Object> parameters;
+    private final List<ParameterMapping> parameterMappings;
 
-    public BoundSql(
-            String sql,
-            List<Object> parameters) {
-
+    public BoundSql(String sql, List<ParameterMapping> parameterMappings) {
         this.sql = sql;
-        this.parameters = parameters;
+        this.parameterMappings = List.copyOf(parameterMappings);
     }
 
     public String getSql() {
         return sql;
     }
 
-    public List<Object> getParameters() {
-        return parameters;
+    public List<ParameterMapping> getParameterMappings() {
+        return parameterMappings;
     }
 }

@@ -1,108 +1,101 @@
-package cn.jens.scripting;
+package cn.jens.mybatis.scripting;
+
+import cn.jens.mybatis.exception.PersistenceException;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * SQL解析器
+ * 把 #{} 占位符转换成 JDBC 的 ? 占位符。
  *
  * @author YumJens
- * @date 2026-09-05 00:05
  */
-public class SqlParser {
+public final class SqlParser {
 
-    /**
-     * 参数占位符正则表达式
-     */
-    private static final Pattern PARAM_PATTERN =
-            Pattern.compile("#\\{([^}]+)}");
+    private static final Pattern PARAM_PATTERN = Pattern.compile("#\\{\\s*([^},\\s]+)[^}]*}");
 
-    /**
-     * 解析SQL语句，将参数占位符替换为实际参数
-     *
-     * @param sql             SQL语句
-     * @param parameterObject 参数对象
-     * @return 解析后的SQL语句和参数列表
-     */
-    public static BoundSql parse(
-            String sql,
-            Object parameterObject) {
-
-        Matcher matcher =
-                PARAM_PATTERN.matcher(sql);
-
-        StringBuffer newSql =
-                new StringBuffer();
-
-        List<Object> parameters =
-                new ArrayList<>();
-
-        while (matcher.find()) {
-
-            String propertyName =
-                    matcher.group(1);
-
-            Object value =
-                    getValue(
-                            parameterObject,
-                            propertyName
-                    );
-
-            parameters.add(value);
-
-            matcher.appendReplacement(
-                    newSql,
-                    "?"
-            );
-        }
-
-        matcher.appendTail(newSql);
-
-        return new BoundSql(
-                newSql.toString(),
-                parameters
-        );
+    private SqlParser() {
     }
 
-    /**
-     * 根据属性名获取属性值
-     *
-     * @param parameterObject 参数对象
-     * @param propertyName  属性名
-     * @return 属性值
-     */
-    private static Object getValue(
-            Object parameterObject,
-            String propertyName) {
+    public static BoundSql parse(String sql, Object parameterObject) {
+        Matcher matcher = PARAM_PATTERN.matcher(sql);
+        StringBuilder jdbcSql = new StringBuilder();
+        var parameterMappings = new ArrayList<ParameterMapping>();
 
-        if (parameterObject == null) {
-            return null;
+        while (matcher.find()) {
+            String property = matcher.group(1);
+            parameterMappings.add(
+                    new ParameterMapping(property, resolveValue(parameterObject, property))
+            );
+            matcher.appendReplacement(jdbcSql, "?");
         }
+        matcher.appendTail(jdbcSql);
+        return new BoundSql(jdbcSql.toString(), parameterMappings);
+    }
 
-        // 基础类型直接返回
-        if (parameterObject instanceof Number
-                || parameterObject instanceof String
-                || parameterObject instanceof Boolean) {
-
+    private static Object resolveValue(Object parameterObject, String propertyPath) {
+        if (parameterObject == null) {
+            throw new PersistenceException(
+                    "Cannot resolve SQL parameter '" + propertyPath + "' from null"
+            );
+        }
+        if (isSimpleType(parameterObject.getClass())) {
             return parameterObject;
         }
 
-        try {
-
-            Field field =
-                    parameterObject
-                            .getClass()
-                            .getDeclaredField(propertyName);
-
-            field.setAccessible(true);
-
-            return field.get(parameterObject);
-
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        Object currentValue = parameterObject;
+        for (String property : propertyPath.split("\\.")) {
+            currentValue = readProperty(currentValue, property, propertyPath);
         }
+        return currentValue;
+    }
+
+    private static Object readProperty(Object target, String property, String propertyPath) {
+        if (target == null) {
+            return null;
+        }
+        if (target instanceof Map<?, ?> map) {
+            if (!map.containsKey(property)) {
+                throw new PersistenceException("SQL parameter not found: " + propertyPath);
+            }
+            return map.get(property);
+        }
+
+        String getterName = "get" + Character.toUpperCase(property.charAt(0)) + property.substring(1);
+        try {
+            Method getter = target.getClass().getMethod(getterName);
+            return getter.invoke(target);
+        } catch (ReflectiveOperationException ignored) {
+            return readField(target, property, propertyPath);
+        }
+    }
+
+    private static Object readField(Object target, String property, String propertyPath) {
+        Class<?> type = target.getClass();
+        while (type != null && type != Object.class) {
+            try {
+                Field field = type.getDeclaredField(property);
+                field.setAccessible(true);
+                return field.get(target);
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            } catch (IllegalAccessException e) {
+                throw new PersistenceException("Cannot read SQL parameter: " + propertyPath, e);
+            }
+        }
+        throw new PersistenceException("SQL parameter not found: " + propertyPath);
+    }
+
+    private static boolean isSimpleType(Class<?> type) {
+        return type.isPrimitive()
+                || Number.class.isAssignableFrom(type)
+                || CharSequence.class.isAssignableFrom(type)
+                || Boolean.class.equals(type)
+                || Character.class.equals(type)
+                || Enum.class.isAssignableFrom(type);
     }
 }
