@@ -2,17 +2,16 @@ package cn.jens.mybatis.executor;
 
 import cn.jens.mybatis.cache.CacheKey;
 import cn.jens.mybatis.cache.LocalCache;
+import cn.jens.mybatis.config.Configuration;
 import cn.jens.mybatis.exception.PersistenceException;
+import cn.jens.mybatis.executor.statement.StatementHandler;
 import cn.jens.mybatis.mapping.MappedStatement;
-import cn.jens.mybatis.reflection.ResultSetHandler;
 import cn.jens.mybatis.scripting.BoundSql;
-import cn.jens.mybatis.scripting.ParameterMapping;
 import cn.jens.mybatis.scripting.SqlParser;
 import cn.jens.mybatis.session.LocalCacheScope;
 import cn.jens.mybatis.transaction.Transaction;
 
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -25,15 +24,16 @@ public class SimpleExecutor implements Executor {
 
     private final Transaction transaction;
 
-    private final LocalCacheScope localCacheScope;
+    private final Configuration configuration;
 
-    private final ResultSetHandler resultSetHandler = new ResultSetHandler();
+    private final LocalCacheScope localCacheScope;
 
     private final LocalCache localCache = new LocalCache();
 
-    public SimpleExecutor(Transaction transaction, LocalCacheScope localCacheScope) {
+    public SimpleExecutor(Transaction transaction, Configuration configuration) {
         this.transaction = transaction;
-        this.localCacheScope = localCacheScope;
+        this.configuration = configuration;
+        this.localCacheScope = configuration.getLocalCacheScope();
     }
 
     @Override
@@ -60,17 +60,13 @@ public class SimpleExecutor implements Executor {
     private <T> List<T> queryFromDatabase(
             MappedStatement mappedStatement,
             BoundSql boundSql) {
-        try (PreparedStatement statement = transaction
-                .getConnection()
-                .prepareStatement(boundSql.getSql())) {
-            setParameters(statement, boundSql);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSetHandler.handle(
-                        resultSet,
-                        mappedStatement.resultType(),
-                        mappedStatement.resultMap()
-                );
-            }
+        StatementHandler statementHandler = configuration.newStatementHandler(
+                mappedStatement,
+                boundSql
+        );
+        try (PreparedStatement statement = statementHandler.prepare(transaction.getConnection())) {
+            statementHandler.parameterize(statement);
+            return statementHandler.query(statement);
         } catch (SQLException e) {
             throw new PersistenceException(
                     "Failed to execute mapped statement: " + mappedStatement.id(),
@@ -83,11 +79,13 @@ public class SimpleExecutor implements Executor {
     public int update(MappedStatement mappedStatement, Object parameter) {
         clearLocalCache();
         BoundSql boundSql = SqlParser.parse(mappedStatement.sql(), parameter);
-        try (PreparedStatement statement = transaction
-                .getConnection()
-                .prepareStatement(boundSql.getSql())) {
-            setParameters(statement, boundSql);
-            return statement.executeUpdate();
+        StatementHandler statementHandler = configuration.newStatementHandler(
+                mappedStatement,
+                boundSql
+        );
+        try (PreparedStatement statement = statementHandler.prepare(transaction.getConnection())) {
+            statementHandler.parameterize(statement);
+            return statementHandler.update(statement);
         } catch (SQLException e) {
             throw new PersistenceException(
                     "Failed to execute mapped statement: " + mappedStatement.id(),
@@ -117,12 +115,5 @@ public class SimpleExecutor implements Executor {
     public void close() {
         clearLocalCache();
         transaction.close();
-    }
-
-    private void setParameters(PreparedStatement statement, BoundSql boundSql) throws SQLException {
-        List<ParameterMapping> mappings = boundSql.getParameterMappings();
-        for (int index = 0; index < mappings.size(); index++) {
-            statement.setObject(index + 1, mappings.get(index).value());
-        }
     }
 }

@@ -2,6 +2,7 @@ package cn.jens.mybatis.config;
 
 import cn.jens.mybatis.datasource.DataSourceFactory;
 import cn.jens.mybatis.exception.PersistenceException;
+import cn.jens.mybatis.plugin.Interceptor;
 import cn.jens.mybatis.session.LocalCacheScope;
 
 import org.w3c.dom.Document;
@@ -37,11 +38,68 @@ public class XmlConfigBuilder {
             Element root = document.getDocumentElement();
             Configuration configuration = new Configuration();
             parseSettings(root, configuration);
+            parsePlugins(root, configuration);
             parseDataSource(root, configuration);
             parseMappers(root, configuration);
             return configuration;
         } catch (ParserConfigurationException | SAXException | IOException e) {
             throw new PersistenceException("Failed to parse mini-MyBatis configuration", e);
+        }
+    }
+
+    private void parsePlugins(Element root, Configuration configuration) {
+        NodeList pluginsNodes = root.getElementsByTagName("plugins");
+        if (pluginsNodes.getLength() == 0) {
+            return;
+        }
+
+        Element plugins = (Element) pluginsNodes.item(0);
+        NodeList children = plugins.getChildNodes();
+        for (int index = 0; index < children.getLength(); index++) {
+            Node child = children.item(index);
+            if (child instanceof Element plugin && "plugin".equals(plugin.getTagName())) {
+                parsePlugin(plugin, configuration);
+            }
+        }
+    }
+
+    private void parsePlugin(Element plugin, Configuration configuration) {
+        String className = plugin.getAttribute("interceptor");
+        if (className.isBlank()) {
+            throw new PersistenceException("Plugin interceptor class must not be blank");
+        }
+
+        Interceptor interceptor = createInterceptor(className);
+        Properties properties = new Properties();
+        NodeList children = plugin.getChildNodes();
+        for (int index = 0; index < children.getLength(); index++) {
+            Node child = children.item(index);
+            if (child instanceof Element property && "property".equals(property.getTagName())) {
+                String name = property.getAttribute("name");
+                if (name.isBlank()) {
+                    throw new PersistenceException("Plugin property name must not be blank");
+                }
+                properties.setProperty(
+                        name,
+                        property.getAttribute("value")
+                );
+            }
+        }
+        interceptor.setProperties(properties);
+        configuration.addInterceptor(interceptor);
+    }
+
+    private Interceptor createInterceptor(String className) {
+        try {
+            Class<?> interceptorType = Class.forName(className);
+            if (!Interceptor.class.isAssignableFrom(interceptorType)) {
+                throw new PersistenceException(
+                        "Plugin must implement Interceptor: " + className
+                );
+            }
+            return (Interceptor) interceptorType.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException e) {
+            throw new PersistenceException("Cannot create plugin: " + className, e);
         }
     }
 

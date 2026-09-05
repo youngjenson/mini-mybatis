@@ -4,6 +4,7 @@ import cn.jens.demo.entity.User;
 import cn.jens.demo.mapper.UserMapper;
 import cn.jens.demo.mapper.UserXmlMapper;
 import cn.jens.mybatis.exception.PersistenceException;
+import cn.jens.mybatis.plugin.InvocationCountingInterceptor;
 import cn.jens.mybatis.session.SqlSession;
 import cn.jens.mybatis.session.SqlSessionFactory;
 import cn.jens.mybatis.session.SqlSessionFactoryBuilder;
@@ -474,6 +475,52 @@ class MiniMyBatisIntegrationTest {
                     session.getMapper(UserXmlMapper.class).selectById(1).getName()
             );
         }
+    }
+
+    /**
+     * 测试配置的插件是否跨执行管道应用。
+     * @throws Exception
+     */
+    @Test
+    void shouldApplyConfiguredPluginAcrossExecutionPipeline() throws Exception {
+        InvocationCountingInterceptor.reset();
+        SqlSessionFactory pluginFactory = buildFactory("mini-mybatis-plugin-test-config.xml");
+
+        try (SqlSession session = pluginFactory.openSession(true)) {
+            UserMapper mapper = session.getMapper(UserMapper.class);
+            User firstResult = mapper.selectById(1);
+            User cachedResult = mapper.selectById(1);
+
+            assertSame(firstResult, cachedResult);
+            assertTrue(mapper.update(user(2, "Bobby", 26)));
+        }
+
+        assertEquals("integration", InvocationCountingInterceptor.getConfiguredLabel());
+        assertEquals(2, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.EXECUTOR_QUERY
+        ));
+        assertEquals(1, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.EXECUTOR_UPDATE
+        ));
+        assertEquals(2, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.STATEMENT_PREPARE
+        ));
+        assertEquals(2, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.STATEMENT_PARAMETERIZE
+        ));
+        assertEquals(1, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.STATEMENT_QUERY
+        ));
+        assertEquals(1, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.STATEMENT_UPDATE
+        ));
+        assertEquals(2, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.PARAMETER_SET
+        ));
+        assertEquals(1, InvocationCountingInterceptor.count(
+                InvocationCountingInterceptor.RESULT_HANDLE
+        ));
+        assertEquals("Bobby", queryUserNameDirectly(2));
     }
 
     private void assertUserDoesNotExist(int id) throws Exception {

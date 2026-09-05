@@ -1,4 +1,4 @@
-package cn.jens.mybatis.reflection;
+package cn.jens.mybatis.executor.resultset;
 
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.mapping.ResultMap;
@@ -18,13 +18,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * 把 ResultSet 的每一行映射为 Java 对象。
- *
- * @author YumJens
- */
-public class ResultSetHandler {
+/** 默认结果集映射实现。 */
+public class DefaultResultSetHandler implements ResultSetHandler {
 
+    @Override
     public <T> List<T> handle(
             ResultSet resultSet,
             Class<?> rawResultType,
@@ -90,7 +87,8 @@ public class ResultSetHandler {
         Class<?> currentType = resultType;
         while (currentType != null && currentType != Object.class) {
             for (Field field : currentType.getDeclaredFields()) {
-                if (Modifier.isStatic(field.getModifiers()) || Modifier.isFinal(field.getModifiers())) {
+                if (Modifier.isStatic(field.getModifiers())
+                        || Modifier.isFinal(field.getModifiers())) {
                     continue;
                 }
                 field.setAccessible(true);
@@ -118,7 +116,8 @@ public class ResultSetHandler {
         while (currentType != null && currentType != Object.class) {
             try {
                 Field field = currentType.getDeclaredField(property);
-                if (Modifier.isStatic(field.getModifiers()) || Modifier.isFinal(field.getModifiers())) {
+                if (Modifier.isStatic(field.getModifiers())
+                        || Modifier.isFinal(field.getModifiers())) {
                     throw new PersistenceException("Result property is not writable: " + property);
                 }
                 return field;

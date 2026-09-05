@@ -6,9 +6,19 @@ import cn.jens.mybatis.annotation.Select;
 import cn.jens.mybatis.annotation.Update;
 import cn.jens.mybatis.cache.Cache;
 import cn.jens.mybatis.exception.PersistenceException;
+import cn.jens.mybatis.executor.Executor;
+import cn.jens.mybatis.executor.parameter.DefaultParameterHandler;
+import cn.jens.mybatis.executor.parameter.ParameterHandler;
+import cn.jens.mybatis.executor.resultset.DefaultResultSetHandler;
+import cn.jens.mybatis.executor.resultset.ResultSetHandler;
+import cn.jens.mybatis.executor.statement.PreparedStatementHandler;
+import cn.jens.mybatis.executor.statement.StatementHandler;
 import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.mapping.ResultMap;
 import cn.jens.mybatis.mapping.SqlCommandType;
+import cn.jens.mybatis.plugin.Interceptor;
+import cn.jens.mybatis.plugin.InterceptorChain;
+import cn.jens.mybatis.scripting.BoundSql;
 import cn.jens.mybatis.session.LocalCacheScope;
 
 import javax.sql.DataSource;
@@ -38,6 +48,8 @@ public class Configuration {
     private final Map<String, ResultMap> resultMaps = new HashMap<>();
 
     private final Map<String, Cache> caches = new HashMap<>();
+
+    private final InterceptorChain interceptorChain = new InterceptorChain();
 
     public DataSource getDataSource() {
         if (dataSource == null) {
@@ -75,6 +87,42 @@ public class Configuration {
 
     public Cache getCache(String namespace) {
         return caches.get(namespace);
+    }
+
+    public void addInterceptor(Interceptor interceptor) {
+        interceptorChain.addInterceptor(interceptor);
+    }
+
+    public List<Interceptor> getInterceptors() {
+        return interceptorChain.getInterceptors();
+    }
+
+    public Executor pluginExecutor(Executor executor) {
+        return (Executor) interceptorChain.pluginAll(executor);
+    }
+
+    public StatementHandler newStatementHandler(
+            MappedStatement mappedStatement,
+            BoundSql boundSql) {
+        ParameterHandler parameterHandler = newParameterHandler(boundSql);
+        ResultSetHandler resultSetHandler = newResultSetHandler();
+        StatementHandler statementHandler = new PreparedStatementHandler(
+                mappedStatement,
+                boundSql,
+                parameterHandler,
+                resultSetHandler
+        );
+        return (StatementHandler) interceptorChain.pluginAll(statementHandler);
+    }
+
+    public ParameterHandler newParameterHandler(BoundSql boundSql) {
+        ParameterHandler parameterHandler = new DefaultParameterHandler(boundSql);
+        return (ParameterHandler) interceptorChain.pluginAll(parameterHandler);
+    }
+
+    public ResultSetHandler newResultSetHandler() {
+        ResultSetHandler resultSetHandler = new DefaultResultSetHandler();
+        return (ResultSetHandler) interceptorChain.pluginAll(resultSetHandler);
     }
 
     public void addMappedStatement(String statementId, MappedStatement mappedStatement) {

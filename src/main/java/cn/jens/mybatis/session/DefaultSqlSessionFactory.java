@@ -29,10 +29,11 @@ public class DefaultSqlSessionFactory implements SqlSessionFactory {
     @Override
     public SqlSession openSession(boolean autoCommit) {
         Transaction transaction = new JdbcTransaction(configuration.getDataSource(), autoCommit);
-        Executor executor = new SimpleExecutor(transaction, configuration.getLocalCacheScope());
+        Executor executor = new SimpleExecutor(transaction, configuration);
         if (configuration.isCacheEnabled()) {
             executor = new CachingExecutor(executor, configuration, autoCommit);
         }
+        executor = configuration.pluginExecutor(executor);
         return new DefaultSqlSession(configuration, executor, autoCommit);
     }
 }

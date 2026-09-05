@@ -2,16 +2,20 @@
 
 这是一个用于理解 MyBatis 核心原理的教学项目，不依赖 MyBatis 本体。
 
-## 当前已完成：Mapper namespace 二级缓存闭环
+## 当前已完成：四大组件与插件链
 
 ```text
 mini-mybatis-config.xml + UserXmlMapper.xml
         ↓ XmlConfigBuilder / XmlMapperBuilder
 Configuration + MappedStatement + ResultMap + Namespace Cache
         ↓ SqlSessionFactory
-SqlSession → MapperProxy → CachingExecutor → SimpleExecutor → JdbcTransaction
-        ↓                     ↓              ↓      ↓          ↓
-   方法与参数解析       二级事务缓存      一级缓存  JDBC   Session Connection
+SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleExecutor
+                                                          ↓
+                                              Plugin(StatementHandler)
+                                                   ↙             ↘
+                                    Plugin(ParameterHandler)  Plugin(ResultSetHandler)
+                                                          ↓
+                                            PreparedStatement / JDBC
 ```
 
 当前支持：
@@ -37,6 +41,13 @@ SqlSession → MapperProxy → CachingExecutor → SimpleExecutor → JdbcTransa
 - 查询默认 `useCache="true"`，可按语句关闭二级缓存
 - 二级缓存写入和清理由事务协调：提交后生效，回滚或未提交关闭时丢弃
 - 自动提交会话在每条 SQL 成功后同步提交二级缓存变更
+- `StatementHandler` 负责创建、参数化和执行 JDBC Statement
+- `ParameterHandler` 负责按占位符顺序绑定参数
+- `ResultSetHandler` 负责基础类型、JavaBean 与 `resultMap` 映射
+- `Interceptor`、`Invocation`、`Plugin`、`InterceptorChain` 插件体系
+- `@Intercepts` 与 `@Signature` 精确声明被拦截的接口方法
+- XML `<plugins>` 注册插件并通过 `<property>` 注入配置
+- 内置 `SlowSqlInterceptor` 慢 SQL 教学示例
 - 基础类型、JavaBean、下划线转驼峰结果映射
 - JDBC 资源自动关闭与统一持久化异常
 - 本地 MySQL 端到端测试
@@ -45,13 +56,27 @@ SqlSession → MapperProxy → CachingExecutor → SimpleExecutor → JdbcTransa
 mini-MyBatis 执行业务路径，再使用原生 JDBC 校验提交后的最终数据。测试还覆盖 SQL
 参数绑定、防注入、执行失败后的整体回滚，以及一、二级缓存行为。
 
+插件配置示例：
+
+```xml
+<plugins>
+    <plugin interceptor="cn.jens.mybatis.plugin.SlowSqlInterceptor">
+        <property name="thresholdMillis" value="200"/>
+    </plugin>
+</plugins>
+```
+
+插件按照配置顺序依次包装目标对象，因此最后配置的插件最先收到调用。当前使用 JDK
+动态代理，只能拦截 `Executor`、`StatementHandler`、`ParameterHandler` 和
+`ResultSetHandler` 接口中通过 `@Signature` 声明的方法。
+
 运行测试：
 
 ```bash
 mvn test
 ```
 
-运行 `Main` 前，请先创建配置中的 `test` 数据库、执行
+运行 `MiniMybatisMain` 前，请先创建配置中的 `test` 数据库、执行
 [`src/main/resources/schema.sql`](src/main/resources/schema.sql)，并按本机环境修改
 `mini-mybatis-config.xml` 的 MySQL 账号与密码。
 
@@ -63,7 +88,8 @@ JUnit 资源锁保证相关测试即使启用并行执行，也不会同时修�
 
 ## 后续里程碑
 
-1. Executor / StatementHandler / ParameterHandler / ResultSetHandler 插件链
-2. 动态 SQL、类型处理器、连接池和分页
+1. 动态 SQL：`if`、`where`、`foreach`
+2. 类型处理器与 JDBC 类型转换
+3. 连接池和分页插件
 
 生产级能力不是本项目目标；每个里程碑会先以小型、可测试的实现解释原理。

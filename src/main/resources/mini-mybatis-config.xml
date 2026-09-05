@@ -4,6 +4,11 @@
         <setting name="cacheEnabled" value="true"/>
         <setting name="localCacheScope" value="SESSION"/>
     </settings>
+    <plugins>
+        <plugin interceptor="cn.jens.mybatis.plugin.SlowSqlInterceptor">
+            <property name="thresholdMillis" value="200"/>
+        </plugin>
+    </plugins>
     <dataSource>
         <property
                 name="driver"
