@@ -10,10 +10,11 @@ import cn.jens.mybatis.session.SqlSessionFactoryBuilder;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
+import javax.sql.DataSource;
 import java.io.InputStream;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
 
@@ -25,18 +26,24 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@ResourceLock("mysql-test-user-table")
 class MiniMyBatisIntegrationTest {
-
-    private static final String URL =
-            "jdbc:mysql://127.0.0.1:3306/test?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&verifyServerCertificate=false";
 
     private SqlSessionFactory sqlSessionFactory;
 
+    private DataSource dataSource;
+
+    /**
+     * 准备工作
+     */
     @BeforeEach
     void setUp() throws Exception {
         sqlSessionFactory = buildFactory("mini-mybatis-test-config.xml");
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            dataSource = session.getConfiguration().getDataSource();
+        }
 
-        try (Connection connection = DriverManager.getConnection(URL, "root", "root");
+        try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("drop table if exists user");
             statement.execute("create table user (id int primary key, name varchar(64), age int)");
@@ -44,6 +51,9 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 端到端测试 Mapper 查询
+     */
     @Test
     void shouldExecuteMapperQueriesEndToEnd() {
         try (SqlSession session = sqlSessionFactory.openSession()) {
@@ -62,8 +72,11 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 提交插入、更新和删除操作
+     */
     @Test
-    void shouldCommitInsertUpdateAndDelete() {
+    void shouldCommitInsertUpdateAndDelete() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession()) {
             UserMapper mapper = session.getMapper(UserMapper.class);
             assertEquals(1, mapper.insert(user(3, "Carol", 30)));
@@ -80,10 +93,16 @@ class MiniMyBatisIntegrationTest {
             assertNull(mapper.selectById(1));
             assertFalse(mapper.update(user(99, "Nobody", 0)));
         }
+
+        assertEquals("Caroline", queryUserNameDirectly(3));
+        assertEquals(0, countUsersByIdDirectly(1));
     }
 
+    /**
+     * 显式回滚
+     */
     @Test
-    void shouldRollbackExplicitly() {
+    void shouldRollbackExplicitly() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession()) {
             UserMapper mapper = session.getMapper(UserMapper.class);
             mapper.insert(user(3, "Carol", 30));
@@ -93,8 +112,11 @@ class MiniMyBatisIntegrationTest {
         assertUserDoesNotExist(3);
     }
 
+    /**
+     * 隐式回滚
+     */
     @Test
-    void shouldRollbackUncommittedChangesWhenClosing() {
+    void shouldRollbackUncommittedChangesWhenClosing() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession()) {
             session.getMapper(UserMapper.class).insert(user(3, "Carol", 30));
         }
@@ -116,6 +138,9 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试在会话关闭后是否拒绝操作。
+     */
     @Test
     void shouldRejectOperationsAfterSessionIsClosed() {
         SqlSession session = sqlSessionFactory.openSession();
@@ -125,6 +150,58 @@ class MiniMyBatisIntegrationTest {
         session.close();
     }
 
+    /**
+     * 测试当语句返回多行时，selectOne() 方法是否抛出异常。
+     */
+    @Test
+    void shouldRejectSelectOneWhenStatementReturnsMultipleRows() {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            PersistenceException exception = assertThrows(
+                    PersistenceException.class,
+                    () -> session.selectOne(UserMapper.class.getName() + ".selectList", null)
+            );
+
+            assertTrue(exception.getMessage().contains("Expected one result"));
+        }
+    }
+
+    /**
+     * 测试 SQL 注入文本是否被视为普通数据。
+     */
+    @Test
+    void shouldBindSqlInjectionTextAsPlainData() {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserMapper mapper = session.getMapper(UserMapper.class);
+
+            assertNull(mapper.selectByNameAndAge("Bob' or 1 = 1 --", 25));
+            assertEquals(2, mapper.count());
+        }
+    }
+
+    /**
+     * 测试在后续语句失败时回滚先前的写操作。
+     * @throws Exception
+     */
+    @Test
+    void shouldRollbackEarlierWritesWhenLaterStatementFails() throws Exception {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserMapper mapper = session.getMapper(UserMapper.class);
+            assertEquals(1, mapper.insert(user(3, "Carol", 30)));
+
+            PersistenceException exception = assertThrows(
+                    PersistenceException.class,
+                    () -> mapper.insert(user(1, "Duplicate", 99))
+            );
+            assertTrue(exception.getMessage().contains("UserMapper.insert"));
+        }
+
+        assertEquals(0, countUsersByIdDirectly(3));
+        assertEquals("Alice", queryUserNameDirectly(1));
+    }
+
+    /**
+     * 测试 XML 映射器。
+     */
     @Test
     void shouldExecuteXmlMapperWithResultMap() {
         try (SqlSession session = sqlSessionFactory.openSession()) {
@@ -141,6 +218,10 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试在会话中缓存相同的查询。
+     * @throws Exception
+     */
     @Test
     void shouldCacheIdenticalQueryWithinSession() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
@@ -160,6 +241,9 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试 DML 操作是否清除缓存。
+     */
     @Test
     void shouldClearLocalCacheAfterDml() {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
@@ -175,6 +259,10 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试提交和回滚是否清除缓存。
+     * @throws Exception
+     */
     @Test
     void shouldClearLocalCacheAfterCommitAndRollback() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
@@ -191,6 +279,10 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试缓存作用域是否为语句。
+     * @throws Exception
+     */
     @Test
     void shouldSkipCacheWhenScopeIsStatement() throws Exception {
         SqlSessionFactory statementScopeFactory = buildFactory(
@@ -208,6 +300,10 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试在配置的 `<select>` 语句之前是否刷新缓存。
+     * @throws Exception
+     */
     @Test
     void shouldFlushCacheBeforeConfiguredSelect() throws Exception {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
@@ -221,10 +317,167 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
-    private void assertUserDoesNotExist(int id) {
+    /**
+     * 测试二级缓存是否在提交后共享。
+     * @throws Exception
+     */
+    @Test
+    void shouldShareSecondLevelCacheAcrossCommittedSessions() throws Exception {
+        User firstResult;
         try (SqlSession session = sqlSessionFactory.openSession()) {
-            assertNull(session.getMapper(UserMapper.class).selectById(id));
+            firstResult = session.getMapper(UserXmlMapper.class).selectById(1);
+            session.commit();
         }
+
+        updateUserNameDirectly(1, "Alicia");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            User cachedResult = session.getMapper(UserXmlMapper.class).selectById(1);
+
+            assertSame(firstResult, cachedResult);
+            assertEquals("Alice", cachedResult.getName());
+        }
+    }
+
+    /**
+     * 测试二级缓存是否在未提交时发布。
+     * @throws Exception
+     */
+    @Test
+    void shouldNotPublishSecondLevelCacheWithoutCommit() throws Exception {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            assertEquals(
+                    "Alice",
+                    session.getMapper(UserXmlMapper.class).selectById(1).getName()
+            );
+        }
+
+        updateUserNameDirectly(1, "Alicia");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            assertEquals(
+                    "Alicia",
+                    session.getMapper(UserXmlMapper.class).selectById(1).getName()
+            );
+            session.commit();
+        }
+    }
+
+    /**
+     * 测试二级缓存是否在提交 DML 操作后失效。
+     */
+    @Test
+    void shouldInvalidateSecondLevelCacheAfterCommittedDml() {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            session.getMapper(UserXmlMapper.class).selectById(1);
+            session.commit();
+        }
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            assertTrue(session.getMapper(UserXmlMapper.class).update(user(1, "Alicia", 21)));
+            session.commit();
+        }
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            User refreshedResult = session.getMapper(UserXmlMapper.class).selectById(1);
+
+            assertEquals("Alicia", refreshedResult.getName());
+            assertEquals(21, refreshedResult.getAge());
+        }
+    }
+
+    /**
+     * 测试二级缓存是否在自动提交时立即发布。
+     * @throws Exception
+     */
+    @Test
+    void shouldPublishSecondLevelCacheImmediatelyWithAutoCommit() throws Exception {
+        User firstResult;
+        try (SqlSession session = sqlSessionFactory.openSession(true)) {
+            firstResult = session.getMapper(UserXmlMapper.class).selectById(1);
+        }
+
+        updateUserNameDirectly(1, "Alicia");
+
+        try (SqlSession session = sqlSessionFactory.openSession(true)) {
+            User cachedResult = session.getMapper(UserXmlMapper.class).selectById(1);
+
+            assertSame(firstResult, cachedResult);
+            assertEquals("Alice", cachedResult.getName());
+        }
+    }
+
+    /**
+     * 测试二级缓存是否在回滚后保持不变。
+     */
+    @Test
+    void shouldKeepSecondLevelCacheUnchangedAfterRollback() {
+        User firstResult;
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            firstResult = session.getMapper(UserXmlMapper.class).selectById(1);
+            session.commit();
+        }
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            assertTrue(session.getMapper(UserXmlMapper.class).update(user(1, "Alicia", 21)));
+            session.rollback();
+        }
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            User cachedResult = session.getMapper(UserXmlMapper.class).selectById(1);
+
+            assertSame(firstResult, cachedResult);
+            assertEquals("Alice", cachedResult.getName());
+        }
+    }
+
+    /**
+     * 测试二级缓存是否被禁用。
+     * @throws Exception
+     */
+    @Test
+    void shouldBypassSecondLevelCacheWhenUseCacheIsFalse() throws Exception {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            session.getMapper(UserXmlMapper.class).selectById(1);
+            session.commit();
+        }
+
+        updateUserNameDirectly(1, "Alicia");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserXmlMapper mapper = session.getMapper(UserXmlMapper.class);
+
+            assertEquals("Alicia", mapper.selectWithoutCacheById(1).getName());
+            assertEquals("Alice", mapper.selectById(1).getName());
+        }
+    }
+
+    /**
+     * 测试从映射器 XML 文件中删除 `<cache>` 元素时，二级缓存是否被禁用。
+     * @throws Exception
+     */
+    @Test
+    void shouldDisableSecondLevelCacheGlobally() throws Exception {
+        SqlSessionFactory uncachedFactory = buildFactory(
+                "mini-mybatis-second-level-cache-disabled-test-config.xml"
+        );
+        try (SqlSession session = uncachedFactory.openSession()) {
+            session.getMapper(UserXmlMapper.class).selectById(1);
+            session.commit();
+        }
+
+        updateUserNameDirectly(1, "Alicia");
+
+        try (SqlSession session = uncachedFactory.openSession()) {
+            assertEquals(
+                    "Alicia",
+                    session.getMapper(UserXmlMapper.class).selectById(1).getName()
+            );
+        }
+    }
+
+    private void assertUserDoesNotExist(int id) throws Exception {
+        assertEquals(0, countUsersByIdDirectly(id));
     }
 
     private User user(int id, String name, int age) {
@@ -242,13 +495,39 @@ class MiniMyBatisIntegrationTest {
     }
 
     private void updateUserNameDirectly(int id, String name) throws Exception {
-        try (Connection connection = DriverManager.getConnection(URL, "root", "root");
+        try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "update user set name = ? where id = ?"
              )) {
             statement.setString(1, name);
             statement.setInt(2, id);
             statement.executeUpdate();
+        }
+    }
+
+    private int countUsersByIdDirectly(int id) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select count(*) from user where id = ?"
+             )) {
+            statement.setInt(1, id);
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                return resultSet.getInt(1);
+            }
+        }
+    }
+
+    private String queryUserNameDirectly(int id) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select name from user where id = ?"
+             )) {
+            statement.setInt(1, id);
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                return resultSet.getString(1);
+            }
         }
     }
 }

@@ -13,10 +13,10 @@ import java.io.InputStream;
  *
  * @author YumJens
  */
-public class Main {
+public class MiniMybatisMain {
 
-    public static void main(String[] args) {
-        try (InputStream inputStream = Main.class.getClassLoader()
+    static void main(String[] args) {
+        try (InputStream inputStream = MiniMybatisMain.class.getClassLoader()
                 .getResourceAsStream("mini-mybatis-config.xml")) {
             if (inputStream == null) {
                 throw new PersistenceException("mini-mybatis-config.xml not found");

@@ -4,6 +4,7 @@ import cn.jens.mybatis.annotation.Delete;
 import cn.jens.mybatis.annotation.Insert;
 import cn.jens.mybatis.annotation.Select;
 import cn.jens.mybatis.annotation.Update;
+import cn.jens.mybatis.cache.Cache;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.mapping.ResultMap;
@@ -30,9 +31,13 @@ public class Configuration {
 
     private LocalCacheScope localCacheScope = LocalCacheScope.SESSION;
 
+    private boolean cacheEnabled = true;
+
     private final Map<String, MappedStatement> mappedStatements = new HashMap<>();
 
     private final Map<String, ResultMap> resultMaps = new HashMap<>();
+
+    private final Map<String, Cache> caches = new HashMap<>();
 
     public DataSource getDataSource() {
         if (dataSource == null) {
@@ -51,6 +56,25 @@ public class Configuration {
 
     public void setLocalCacheScope(LocalCacheScope localCacheScope) {
         this.localCacheScope = localCacheScope;
+    }
+
+    public boolean isCacheEnabled() {
+        return cacheEnabled;
+    }
+
+    public void setCacheEnabled(boolean cacheEnabled) {
+        this.cacheEnabled = cacheEnabled;
+    }
+
+    public void addCache(Cache cache) {
+        Cache previous = caches.putIfAbsent(cache.getId(), cache);
+        if (previous != null) {
+            throw new PersistenceException("Duplicate cache namespace: " + cache.getId());
+        }
+    }
+
+    public Cache getCache(String namespace) {
+        return caches.get(namespace);
     }
 
     public void addMappedStatement(String statementId, MappedStatement mappedStatement) {

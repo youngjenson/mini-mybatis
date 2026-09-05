@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <mapper namespace="cn.jens.demo.mapper.UserXmlMapper">
+    <cache/>
+
     <resultMap id="userResultMap" type="cn.jens.demo.entity.User">
         <id property="id" column="user_id"/>
         <result property="name" column="user_name"/>
@@ -19,6 +21,12 @@
     </select>
 
     <select id="selectFreshById" resultMap="userResultMap" flushCache="true">
+        select id as user_id, name as user_name, age as user_age
+        from user
+        where id = #{id}
+    </select>
+
+    <select id="selectWithoutCacheById" resultMap="userResultMap" useCache="false">
         select id as user_id, name as user_name, age as user_age
         from user
         where id = #{id}

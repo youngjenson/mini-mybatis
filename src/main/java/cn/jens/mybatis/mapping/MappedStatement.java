@@ -11,10 +11,11 @@ public record MappedStatement(
         Class<?> resultType,
         SqlCommandType sqlCommandType,
         ResultMap resultMap,
-        boolean flushCacheRequired) {
+        boolean flushCacheRequired,
+        boolean useCache) {
 
     public MappedStatement(String id, String sql, Class<?> resultType) {
-        this(id, sql, resultType, SqlCommandType.SELECT, null, false);
+        this(id, sql, resultType, SqlCommandType.SELECT, null, false, true);
     }
 
     public MappedStatement(
@@ -22,7 +23,15 @@ public record MappedStatement(
             String sql,
             Class<?> resultType,
             SqlCommandType sqlCommandType) {
-        this(id, sql, resultType, sqlCommandType, null, sqlCommandType != SqlCommandType.SELECT);
+        this(
+                id,
+                sql,
+                resultType,
+                sqlCommandType,
+                null,
+                sqlCommandType != SqlCommandType.SELECT,
+                sqlCommandType == SqlCommandType.SELECT
+        );
     }
 
     public MappedStatement(
@@ -37,7 +46,13 @@ public record MappedStatement(
                 resultType,
                 sqlCommandType,
                 resultMap,
-                sqlCommandType != SqlCommandType.SELECT
+                sqlCommandType != SqlCommandType.SELECT,
+                sqlCommandType == SqlCommandType.SELECT
         );
+    }
+
+    public String namespace() {
+        int separatorIndex = id.lastIndexOf('.');
+        return separatorIndex < 0 ? id : id.substring(0, separatorIndex);
     }
 }

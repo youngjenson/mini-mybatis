@@ -1,42 +1,79 @@
 package cn.jens.mybatis;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Disabled;
+import cn.jens.mybatis.config.XmlConfigBuilder;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+
+import javax.sql.DataSource;
+import java.io.InputStream;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 
-/**
- * 测试JDBC
- * @author YumJens
- * @date 2026-09-05 15:10
- */
-public class TestJdbc {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** 使用原生 JDBC 建立真实 MySQL 行为基线。 */
+@ResourceLock("mysql-test-user-table")
+class TestJdbc {
+
+    private DataSource dataSource;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        try (InputStream inputStream = getClass().getClassLoader()
+                .getResourceAsStream("mini-mybatis-test-config.xml")) {
+            dataSource = new XmlConfigBuilder().parse(inputStream).getDataSource();
+        }
+        try (Connection connection = openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("drop table if exists user");
+            statement.execute(
+                    "create table user (id int primary key, name varchar(64), age int)"
+            );
+            statement.execute("insert into user values (1, 'Alice', 20), (2, 'Bob', 25)");
+        }
+    }
 
     @Test
-    @Disabled("手工 JDBC 对照实验，需要本地 MySQL；自动化链路由 MiniMyBatisIntegrationTest 覆盖")
-    public void test() throws Exception {
+    void shouldQueryRealRowsWithPreparedStatement() throws Exception {
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select id, name, age from user where id = ?"
+             )) {
+            statement.setInt(1, 1);
 
-        // 记载驱动
-        Class.forName("com.mysql.cj.jdbc.Driver");
-
-        // 获取连接
-        Connection connection = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/test?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=UTC", "root", "root");
-        // 创建PreparedStatement
-        PreparedStatement ps = connection.prepareStatement("select * from user");
-        ps.execute();
-
-        // 获取结果集
-        ResultSet resultSet = ps.getResultSet();
-        while (resultSet.next()) {
-            System.out.println(resultSet.getString("name"));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                assertEquals(1, resultSet.getInt("id"));
+                assertEquals("Alice", resultSet.getString("name"));
+                assertEquals(20, resultSet.getInt("age"));
+                assertFalse(resultSet.next());
+            }
         }
+    }
 
-        // 释放资源
-        resultSet.close();
-        ps.close();
-        connection.close();
+    @Test
+    void shouldTreatInjectionTextAsAPlainParameter() throws Exception {
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "select count(*) from user where name = ?"
+             )) {
+            statement.setString(1, "Alice' or 1 = 1 --");
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                assertEquals(0, resultSet.getInt(1));
+            }
+        }
+    }
+
+    private Connection openConnection() throws SQLException {
+        return dataSource.getConnection();
     }
 }

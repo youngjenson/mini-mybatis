@@ -13,8 +13,10 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class XmlMapperBuilderTest {
 
@@ -22,11 +24,15 @@ class XmlMapperBuilderTest {
     void shouldParseResultMapAndSelectStatement() {
         String xml = """
                 <mapper namespace="%s">
+                    <cache/>
                     <resultMap id="userMap" type="%s">
                         <id property="id" column="user_id"/>
                         <result property="name" column="user_name"/>
                     </resultMap>
                     <select id="selectUser" resultMap="userMap" flushCache="true">
+                        select id as user_id, name as user_name from user
+                    </select>
+                    <select id="selectUserWithoutCache" resultMap="userMap" useCache="false">
                         select id as user_id, name as user_name from user
                     </select>
                 </mapper>
@@ -39,7 +45,12 @@ class XmlMapperBuilderTest {
         assertEquals(SqlCommandType.SELECT, statement.sqlCommandType());
         assertEquals(User.class, statement.resultType());
         assertNotNull(statement.resultMap());
-        assertEquals(true, statement.flushCacheRequired());
+        assertTrue(statement.flushCacheRequired());
+        assertTrue(statement.useCache());
+        assertNotNull(configuration.getCache(SampleMapper.class.getName()));
+        assertFalse(configuration.getMappedStatement(
+                SampleMapper.class.getName() + ".selectUserWithoutCache"
+        ).useCache());
         assertEquals("user_name", statement.resultMap().resultMappings().get(1).column());
     }
 

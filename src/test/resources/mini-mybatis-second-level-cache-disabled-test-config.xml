@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <configuration>
     <settings>
-        <setting name="cacheEnabled" value="true"/>
-        <setting name="localCacheScope" value="STATEMENT"/>
+        <setting name="cacheEnabled" value="false"/>
+        <setting name="localCacheScope" value="SESSION"/>
     </settings>
     <dataSource>
         <property name="driver" value="com.mysql.cj.jdbc.Driver"/>

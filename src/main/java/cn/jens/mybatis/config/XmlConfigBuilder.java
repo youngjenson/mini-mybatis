@@ -64,9 +64,16 @@ public class XmlConfigBuilder {
     }
 
     private void applySetting(Configuration configuration, String name, String value) {
-        if (!"localCacheScope".equals(name)) {
-            throw new PersistenceException("Unsupported setting: " + name);
+        switch (name) {
+            case "localCacheScope" -> setLocalCacheScope(configuration, value);
+            case "cacheEnabled" -> configuration.setCacheEnabled(
+                    parseBooleanSetting(name, value)
+            );
+            default -> throw new PersistenceException("Unsupported setting: " + name);
         }
+    }
+
+    private void setLocalCacheScope(Configuration configuration, String value) {
         try {
             configuration.setLocalCacheScope(
                     LocalCacheScope.valueOf(value.toUpperCase(Locale.ROOT))
@@ -74,6 +81,13 @@ public class XmlConfigBuilder {
         } catch (IllegalArgumentException e) {
             throw new PersistenceException("Invalid localCacheScope: " + value, e);
         }
+    }
+
+    private boolean parseBooleanSetting(String name, String value) {
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+            throw new PersistenceException("Invalid " + name + ": " + value);
+        }
+        return Boolean.parseBoolean(value);
     }
 
     private DocumentBuilderFactory newDocumentBuilderFactory()

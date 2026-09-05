@@ -1,7 +1,9 @@
 package cn.jens.mybatis.cache;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import cn.jens.mybatis.mapping.MappedStatement;
+import cn.jens.mybatis.scripting.BoundSql;
+import cn.jens.mybatis.scripting.ParameterMapping;
+
 import java.util.List;
 
 /**
@@ -14,6 +16,13 @@ import java.util.List;
 public record CacheKey(String statementId, String sql, List<Object> parameterValues) {
 
     public CacheKey {
-        parameterValues = Collections.unmodifiableList(new ArrayList<>(parameterValues));
+        parameterValues = List.copyOf(parameterValues);
+    }
+
+    public static CacheKey create(MappedStatement mappedStatement, BoundSql boundSql) {
+        List<Object> parameterValues = boundSql.getParameterMappings().stream()
+                .map(ParameterMapping::value)
+                .toList();
+        return new CacheKey(mappedStatement.id(), boundSql.getSql(), parameterValues);
     }
 }

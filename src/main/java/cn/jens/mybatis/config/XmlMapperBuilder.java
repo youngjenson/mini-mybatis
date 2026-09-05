@@ -1,5 +1,6 @@
 package cn.jens.mybatis.config;
 
+import cn.jens.mybatis.cache.PerpetualCache;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.mapping.ResultMap;
@@ -40,10 +41,21 @@ public class XmlMapperBuilder {
             }
             String namespace = requiredAttribute(mapper, "namespace", resource);
             registerMapperInterface(namespace);
+            parseCache(mapper, namespace, resource);
             parseResultMaps(mapper, namespace, resource);
             parseStatements(mapper, namespace, resource);
         } catch (ParserConfigurationException | SAXException | IOException e) {
             throw new PersistenceException("Failed to parse XML mapper: " + resource, e);
+        }
+    }
+
+    private void parseCache(Element mapper, String namespace, String resource) {
+        List<Element> cacheElements = directChildren(mapper, "cache");
+        if (cacheElements.size() > 1) {
+            throw new PersistenceException("Mapper can declare only one <cache>: " + resource);
+        }
+        if (!cacheElements.isEmpty()) {
+            configuration.addCache(new PerpetualCache(namespace));
         }
     }
 
@@ -91,10 +103,25 @@ public class XmlMapperBuilder {
                             resultType,
                             commandType,
                             resultMap,
-                            resolveFlushCache(element, commandType, resource)
+                            resolveFlushCache(element, commandType, resource),
+                            resolveUseCache(element, commandType, resource)
                     )
             );
         }
+    }
+
+    private boolean resolveUseCache(
+            Element statement,
+            SqlCommandType commandType,
+            String resource) {
+        String value = statement.getAttribute("useCache");
+        if (value.isBlank()) {
+            return commandType == SqlCommandType.SELECT;
+        }
+        if (commandType != SqlCommandType.SELECT) {
+            throw new PersistenceException("useCache is only valid for select in " + resource);
+        }
+        return parseBooleanAttribute("useCache", value, resource);
     }
 
     private boolean resolveFlushCache(
@@ -105,8 +132,14 @@ public class XmlMapperBuilder {
         if (value.isBlank()) {
             return commandType != SqlCommandType.SELECT;
         }
+        return parseBooleanAttribute("flushCache", value, resource);
+    }
+
+    private boolean parseBooleanAttribute(String name, String value, String resource) {
         if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
-            throw new PersistenceException("Invalid flushCache value in " + resource + ": " + value);
+            throw new PersistenceException(
+                    "Invalid " + name + " value in " + resource + ": " + value
+            );
         }
         return Boolean.parseBoolean(value);
     }

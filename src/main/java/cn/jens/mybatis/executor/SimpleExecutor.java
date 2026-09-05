@@ -14,7 +14,6 @@ import cn.jens.mybatis.transaction.Transaction;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,7 +42,7 @@ public class SimpleExecutor implements Executor {
             clearLocalCache();
         }
         BoundSql boundSql = SqlParser.parse(mappedStatement.sql(), parameter);
-        CacheKey cacheKey = createCacheKey(mappedStatement, boundSql);
+        CacheKey cacheKey = CacheKey.create(mappedStatement, boundSql);
         if (localCacheScope == LocalCacheScope.SESSION) {
             List<T> cachedResults = localCache.get(cacheKey);
             if (cachedResults != null) {
@@ -118,14 +117,6 @@ public class SimpleExecutor implements Executor {
     public void close() {
         clearLocalCache();
         transaction.close();
-    }
-
-    private CacheKey createCacheKey(MappedStatement mappedStatement, BoundSql boundSql) {
-        List<Object> parameterValues = new ArrayList<>();
-        for (ParameterMapping mapping : boundSql.getParameterMappings()) {
-            parameterValues.add(mapping.value());
-        }
-        return new CacheKey(mappedStatement.id(), boundSql.getSql(), parameterValues);
     }
 
     private void setParameters(PreparedStatement statement, BoundSql boundSql) throws SQLException {

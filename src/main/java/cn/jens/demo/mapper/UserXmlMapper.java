@@ -14,6 +14,8 @@ public interface UserXmlMapper {
 
     User selectFreshById(@Param("id") Integer id);
 
+    User selectWithoutCacheById(@Param("id") Integer id);
+
     Integer count();
 
     int insert(User user);

@@ -1,6 +1,7 @@
 package cn.jens.mybatis.session;
 
 import cn.jens.mybatis.config.Configuration;
+import cn.jens.mybatis.executor.CachingExecutor;
 import cn.jens.mybatis.executor.Executor;
 import cn.jens.mybatis.executor.SimpleExecutor;
 import cn.jens.mybatis.transaction.JdbcTransaction;
@@ -29,6 +30,9 @@ public class DefaultSqlSessionFactory implements SqlSessionFactory {
     public SqlSession openSession(boolean autoCommit) {
         Transaction transaction = new JdbcTransaction(configuration.getDataSource(), autoCommit);
         Executor executor = new SimpleExecutor(transaction, configuration.getLocalCacheScope());
+        if (configuration.isCacheEnabled()) {
+            executor = new CachingExecutor(executor, configuration, autoCommit);
+        }
         return new DefaultSqlSession(configuration, executor, autoCommit);
     }
 }
