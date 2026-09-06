@@ -1,6 +1,7 @@
 package cn.jens.mybatis.executor;
 
 import cn.jens.mybatis.mapping.MappedStatement;
+import cn.jens.mybatis.scripting.BoundSql;
 
 import java.util.List;
 
@@ -12,6 +13,11 @@ import java.util.List;
 public interface Executor {
 
     <T> List<T> query(MappedStatement mappedStatement, Object parameter);
+
+    <T> List<T> query(
+            MappedStatement mappedStatement,
+            Object parameter,
+            BoundSql boundSql);
 
     int update(MappedStatement mappedStatement, Object parameter);
 

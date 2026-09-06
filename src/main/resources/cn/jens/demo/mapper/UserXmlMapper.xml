@@ -32,6 +32,35 @@
         where id = #{id}
     </select>
 
+    <select id="selectDynamic" resultMap="userResultMap">
+        select id as user_id, name as user_name, age as user_age
+        from user
+        <where>
+            <if test="name != null and name != ''">
+                name = #{name}
+            </if>
+            <if test="minAge != null">
+                AND age &gt;= #{minAge}
+            </if>
+        </where>
+        order by id
+    </select>
+
+    <select id="selectByIds" resultMap="userResultMap">
+        select id as user_id, name as user_name, age as user_age
+        from user
+        <where>
+            <if test="ids == null or ids.size == 0">
+                1 = 0
+            </if>
+            <foreach collection="ids" item="id" nullable="true"
+                     open="id in (" separator="," close=")">
+                #{id}
+            </foreach>
+        </where>
+        order by id
+    </select>
+
     <select id="count" resultType="integer">
         select count(*) from user
     </select>

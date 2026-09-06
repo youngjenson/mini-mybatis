@@ -7,7 +7,6 @@ import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.executor.statement.StatementHandler;
 import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.scripting.BoundSql;
-import cn.jens.mybatis.scripting.SqlParser;
 import cn.jens.mybatis.session.LocalCacheScope;
 import cn.jens.mybatis.transaction.Transaction;
 
@@ -38,10 +37,17 @@ public class SimpleExecutor implements Executor {
 
     @Override
     public <T> List<T> query(MappedStatement mappedStatement, Object parameter) {
+        return query(mappedStatement, parameter, mappedStatement.getBoundSql(parameter));
+    }
+
+    @Override
+    public <T> List<T> query(
+            MappedStatement mappedStatement,
+            Object parameter,
+            BoundSql boundSql) {
         if (mappedStatement.flushCacheRequired()) {
             clearLocalCache();
         }
-        BoundSql boundSql = SqlParser.parse(mappedStatement.sql(), parameter);
         CacheKey cacheKey = CacheKey.create(mappedStatement, boundSql);
         if (localCacheScope == LocalCacheScope.SESSION) {
             List<T> cachedResults = localCache.get(cacheKey);
@@ -78,7 +84,7 @@ public class SimpleExecutor implements Executor {
     @Override
     public int update(MappedStatement mappedStatement, Object parameter) {
         clearLocalCache();
-        BoundSql boundSql = SqlParser.parse(mappedStatement.sql(), parameter);
+        BoundSql boundSql = mappedStatement.getBoundSql(parameter);
         StatementHandler statementHandler = configuration.newStatementHandler(
                 mappedStatement,
                 boundSql

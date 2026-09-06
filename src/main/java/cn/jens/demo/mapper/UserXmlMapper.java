@@ -16,6 +16,13 @@ public interface UserXmlMapper {
 
     User selectWithoutCacheById(@Param("id") Integer id);
 
+    List<User> selectDynamic(
+            @Param("name") String name,
+            @Param("minAge") Integer minAge
+    );
+
+    List<User> selectByIds(@Param("ids") List<Integer> ids);
+
     Integer count();
 
     int insert(User user);

@@ -6,7 +6,6 @@ import cn.jens.mybatis.cache.TransactionalCacheManager;
 import cn.jens.mybatis.config.Configuration;
 import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.scripting.BoundSql;
-import cn.jens.mybatis.scripting.SqlParser;
 
 import java.util.List;
 
@@ -33,9 +32,17 @@ public class CachingExecutor implements Executor {
 
     @Override
     public <T> List<T> query(MappedStatement mappedStatement, Object parameter) {
+        return query(mappedStatement, parameter, mappedStatement.getBoundSql(parameter));
+    }
+
+    @Override
+    public <T> List<T> query(
+            MappedStatement mappedStatement,
+            Object parameter,
+            BoundSql boundSql) {
         Cache cache = getCache(mappedStatement);
         if (cache == null) {
-            return delegate.query(mappedStatement, parameter);
+            return delegate.query(mappedStatement, parameter, boundSql);
         }
 
         try {
@@ -45,15 +52,14 @@ public class CachingExecutor implements Executor {
 
             List<T> results;
             if (mappedStatement.useCache()) {
-                BoundSql boundSql = SqlParser.parse(mappedStatement.sql(), parameter);
                 CacheKey cacheKey = CacheKey.create(mappedStatement, boundSql);
                 results = transactionalCacheManager.get(cache, cacheKey);
                 if (results == null) {
-                    results = delegate.query(mappedStatement, parameter);
+                    results = delegate.query(mappedStatement, parameter, boundSql);
                     transactionalCacheManager.put(cache, cacheKey, results);
                 }
             } else {
-                results = delegate.query(mappedStatement, parameter);
+                results = delegate.query(mappedStatement, parameter, boundSql);
             }
 
             commitCacheIfAutoCommit();

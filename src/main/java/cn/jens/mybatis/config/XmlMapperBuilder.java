@@ -6,6 +6,8 @@ import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.mapping.ResultMap;
 import cn.jens.mybatis.mapping.ResultMapping;
 import cn.jens.mybatis.mapping.SqlCommandType;
+import cn.jens.mybatis.scripting.SqlSource;
+import cn.jens.mybatis.scripting.xmltags.XmlScriptBuilder;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -93,6 +95,7 @@ public class XmlMapperBuilder {
             if (sql.isBlank()) {
                 throw new PersistenceException("SQL must not be blank: " + statementId);
             }
+            SqlSource sqlSource = new XmlScriptBuilder(resource).parse(element);
             ResultMap resultMap = resolveResultMap(element, namespace, commandType, resource);
             Class<?> resultType = resolveResultType(element, resultMap, commandType, resource);
             configuration.addMappedStatement(
@@ -104,7 +107,8 @@ public class XmlMapperBuilder {
                             commandType,
                             resultMap,
                             resolveFlushCache(element, commandType, resource),
-                            resolveUseCache(element, commandType, resource)
+                            resolveUseCache(element, commandType, resource),
+                            sqlSource
                     )
             );
         }

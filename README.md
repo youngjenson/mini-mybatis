@@ -2,14 +2,16 @@
 
 这是一个用于理解 MyBatis 核心原理的教学项目，不依赖 MyBatis 本体。
 
-## 当前已完成：四大组件与插件链
+## 当前已完成：动态 SQL 节点树
 
 ```text
 mini-mybatis-config.xml + UserXmlMapper.xml
         ↓ XmlConfigBuilder / XmlMapperBuilder
-Configuration + MappedStatement + ResultMap + Namespace Cache
+Configuration + MappedStatement + SqlSource + ResultMap + Namespace Cache
         ↓ SqlSessionFactory
 SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleExecutor
+                              ↓                    ↓
+                    DynamicSqlSource → SqlNode Tree → BoundSql
                                                           ↓
                                               Plugin(StatementHandler)
                                                    ↙             ↘
@@ -23,6 +25,15 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
 - 从 XML 创建非池化 `DataSource`
 - `<mapper class="...">` 注解 Mapper 与 `<mapper resource="...">` XML Mapper
 - XML `<mapper namespace>` 和 `<select>/<insert>/<update>/<delete>`
+- 动态 SQL 节点树：`SqlSource`、`DynamicSqlSource`、`SqlNode`、`DynamicContext`
+- XML 动态标签：`<if>`、`<where>`、`<foreach>`，并支持嵌套组合
+- `<if test="...">` 支持空值、布尔值、数字、字符串、比较运算、`and/or/not`
+  以及括号组成的常用表达式子集
+- `<where>` 仅在存在有效条件时生成 `WHERE`，并移除开头的 `AND` 或 `OR`
+- `<foreach>` 支持 `Iterable`、数组和 `Map`，以及 `item`、`index`、`open`、
+  `close`、`separator`、`nullable` 属性
+- `<foreach>` 为每次迭代生成唯一参数名，集合值仍通过 `#{}` 和
+  `PreparedStatement` 安全绑定
 - `resultType` 与 `<resultMap>`、`<id>`、`<result>` 显式字段映射
 - `@Select`、`@Insert`、`@Update`、`@Delete` 与 `@Param`
 - `#{property}` 参数解析和 `PreparedStatement` 参数绑定
@@ -56,6 +67,25 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
 mini-MyBatis 执行业务路径，再使用原生 JDBC 校验提交后的最终数据。测试还覆盖 SQL
 参数绑定、防注入、执行失败后的整体回滚，以及一、二级缓存行为。
 
+动态 SQL 示例：
+
+```xml
+<select id="selectByIds" resultMap="userResultMap">
+    select id, name, age, email from user
+    <where>
+        <if test="ids == null or ids.size == 0">1 = 0</if>
+        <foreach collection="ids" item="id" nullable="true"
+                 open="id in (" separator="," close=")">
+            #{id}
+        </foreach>
+    </where>
+    order by id
+</select>
+```
+
+表达式求值器用于展示动态 SQL 原理，当前不是完整 OGNL 实现。它支持嵌套属性，以及集合的
+`size`、`isEmpty`、数组/字符串的 `length`；尚不支持方法调用、算术运算和 OGNL 的全部语法。
+
 插件配置示例：
 
 ```xml
@@ -88,8 +118,7 @@ JUnit 资源锁保证相关测试即使启用并行执行，也不会同时修�
 
 ## 后续里程碑
 
-1. 动态 SQL：`if`、`where`、`foreach`
-2. 类型处理器与 JDBC 类型转换
-3. 连接池和分页插件
+1. 类型处理器与 JDBC 类型转换
+2. 连接池和分页插件
 
 生产级能力不是本项目目标；每个里程碑会先以小型、可测试的实现解释原理。

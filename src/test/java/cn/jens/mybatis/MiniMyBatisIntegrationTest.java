@@ -39,7 +39,7 @@ class MiniMyBatisIntegrationTest {
      */
     @BeforeEach
     void setUp() throws Exception {
-        sqlSessionFactory = buildFactory("mini-mybatis-test-config.xml");
+        sqlSessionFactory = buildFactory("mini-mybatis-config.xml");
         try (SqlSession session = sqlSessionFactory.openSession()) {
             dataSource = session.getConfiguration().getDataSource();
         }
@@ -216,6 +216,33 @@ class MiniMyBatisIntegrationTest {
             assertEquals(1, mapper.deleteById(1));
             assertEquals(2, mapper.count());
             session.commit();
+        }
+    }
+
+    @Test
+    void shouldExecuteIfAndWhereDynamicSql() {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserXmlMapper mapper = session.getMapper(UserXmlMapper.class);
+
+            assertEquals(2, mapper.selectDynamic(null, null).size());
+            assertEquals("Bob", mapper.selectDynamic("Bob", null).getFirst().getName());
+            assertEquals("Bob", mapper.selectDynamic(null, 21).getFirst().getName());
+            assertTrue(mapper.selectDynamic("Alice", 21).isEmpty());
+        }
+    }
+
+    @Test
+    void shouldExecuteForeachDynamicSql() {
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserXmlMapper mapper = session.getMapper(UserXmlMapper.class);
+
+            assertEquals(
+                    List.of(1, 2),
+                    mapper.selectByIds(List.of(2, 1)).stream().map(User::getId).toList()
+            );
+            assertEquals("Bob", mapper.selectByIds(List.of(2)).getFirst().getName());
+            assertTrue(mapper.selectByIds(List.of()).isEmpty());
+            assertTrue(mapper.selectByIds(null).isEmpty());
         }
     }
 
