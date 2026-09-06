@@ -3,6 +3,7 @@ package cn.jens.mybatis;
 import cn.jens.demo.entity.User;
 import cn.jens.demo.mapper.UserMapper;
 import cn.jens.demo.mapper.UserXmlMapper;
+import cn.jens.demo.type.EmailAddress;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.plugin.InvocationCountingInterceptor;
 import cn.jens.mybatis.session.SqlSession;
@@ -47,8 +48,14 @@ class MiniMyBatisIntegrationTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("drop table if exists user");
-            statement.execute("create table user (id int primary key, name varchar(64), age int)");
-            statement.execute("insert into user values (1, 'Alice', 20), (2, 'Bob', 25)");
+            statement.execute(
+                    "create table user (id int primary key, name varchar(64), "
+                            + "age int, email varchar(128))"
+            );
+            statement.execute(
+                    "insert into user (id, name, age) "
+                            + "values (1, 'Alice', 20), (2, 'Bob', 25)"
+            );
         }
     }
 
@@ -219,6 +226,9 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试动态 SQL。
+     */
     @Test
     void shouldExecuteIfAndWhereDynamicSql() {
         try (SqlSession session = sqlSessionFactory.openSession()) {
@@ -231,6 +241,9 @@ class MiniMyBatisIntegrationTest {
         }
     }
 
+    /**
+     * 测试 foreach 动态 SQL。
+     */
     @Test
     void shouldExecuteForeachDynamicSql() {
         try (SqlSession session = sqlSessionFactory.openSession()) {
@@ -243,6 +256,34 @@ class MiniMyBatisIntegrationTest {
             assertEquals("Bob", mapper.selectByIds(List.of(2)).getFirst().getName());
             assertTrue(mapper.selectByIds(List.of()).isEmpty());
             assertTrue(mapper.selectByIds(null).isEmpty());
+        }
+    }
+
+    @Test
+    void shouldRoundTripCustomTypeHandlerAndBindTypedNull() throws Exception {
+        User carol = user(3, "Carol", 30);
+        carol.setEmail(new EmailAddress("Carol@Example.COM"));
+        User noEmail = user(4, "David", 28);
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserXmlMapper mapper = session.getMapper(UserXmlMapper.class);
+
+            assertEquals(1, mapper.insertWithEmail(carol));
+            assertEquals(1, mapper.insertWithEmail(noEmail));
+            session.commit();
+        }
+
+        assertEquals("carol@example.com", queryUserEmailDirectly(3));
+        assertNull(queryUserEmailDirectly(4));
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            UserXmlMapper mapper = session.getMapper(UserXmlMapper.class);
+
+            assertEquals(
+                    new EmailAddress("carol@example.com"),
+                    mapper.selectWithEmailById(3).getEmail()
+            );
+            assertNull(mapper.selectWithEmailById(4).getEmail());
         }
     }
 
@@ -596,6 +637,19 @@ class MiniMyBatisIntegrationTest {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "select name from user where id = ?"
+             )) {
+            statement.setInt(1, id);
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                return resultSet.getString(1);
+            }
+        }
+    }
+
+    private String queryUserEmailDirectly(int id) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select email from user where id = ?"
              )) {
             statement.setInt(1, id);
             try (var resultSet = statement.executeQuery()) {

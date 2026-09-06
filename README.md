@@ -2,12 +2,12 @@
 
 这是一个用于理解 MyBatis 核心原理的教学项目，不依赖 MyBatis 本体。
 
-## 当前已完成：动态 SQL 节点树
+## 当前已完成：类型处理器与 JDBC 类型转换
 
 ```text
 mini-mybatis-config.xml + UserXmlMapper.xml
         ↓ XmlConfigBuilder / XmlMapperBuilder
-Configuration + MappedStatement + SqlSource + ResultMap + Namespace Cache
+Configuration + MappedStatement + SqlSource + ResultMap + TypeHandlerRegistry
         ↓ SqlSessionFactory
 SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleExecutor
                               ↓                    ↓
@@ -16,6 +16,8 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
                                               Plugin(StatementHandler)
                                                    ↙             ↘
                                     Plugin(ParameterHandler)  Plugin(ResultSetHandler)
+                                                   ↘             ↙
+                                             TypeHandler / JdbcType
                                                           ↓
                                             PreparedStatement / JDBC
 ```
@@ -34,6 +36,15 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
   `close`、`separator`、`nullable` 属性
 - `<foreach>` 为每次迭代生成唯一参数名，集合值仍通过 `#{}` 和
   `PreparedStatement` 安全绑定
+- `TypeHandler<T>` 与 `BaseTypeHandler<T>` 双向转换 Java 值和 JDBC 值
+- `TypeHandlerRegistry` 按 Java 类型、`JdbcType` 和映射级覆盖选择处理器
+- 内置字符串、数值、布尔、字符、枚举、`LocalDate`、`LocalDateTime` 处理器
+- XML `<typeHandlers>` 注册自定义处理器，支持 `@MappedTypes`、
+  `@MappedJdbcTypes` 和泛型类型推断
+- `#{property, javaType=..., jdbcType=..., typeHandler=...}` 参数元数据
+- `<id>/<result>` 的 `javaType`、`jdbcType`、`typeHandler` 映射属性
+- `<setting name="jdbcTypeForNull" value="OTHER"/>` 空参数 JDBC 类型策略
+- `EmailAddressTypeHandler` 自定义值对象转换示例
 - `resultType` 与 `<resultMap>`、`<id>`、`<result>` 显式字段映射
 - `@Select`、`@Insert`、`@Update`、`@Delete` 与 `@Param`
 - `#{property}` 参数解析和 `PreparedStatement` 参数绑定
@@ -86,6 +97,23 @@ mini-MyBatis 执行业务路径，再使用原生 JDBC 校验提交后的最终�
 表达式求值器用于展示动态 SQL 原理，当前不是完整 OGNL 实现。它支持嵌套属性，以及集合的
 `size`、`isEmpty`、数组/字符串的 `length`；尚不支持方法调用、算术运算和 OGNL 的全部语法。
 
+类型处理器配置与映射示例：
+
+```xml
+<typeHandlers>
+    <typeHandler handler="cn.jens.demo.typehandler.EmailAddressTypeHandler"/>
+</typeHandlers>
+
+<result property="email" column="user_email"
+        javaType="cn.jens.demo.type.EmailAddress" jdbcType="VARCHAR"/>
+
+<!-- null 值也能依靠显式 javaType 找到处理器，并通过 setNull(VARCHAR) 绑定 -->
+#{email, javaType=cn.jens.demo.type.EmailAddress, jdbcType=VARCHAR}
+```
+
+当前 `<typeHandlers>` 支持逐个注册处理器；包扫描尚未实现。未显式声明 `javaType` 时，参数侧
+从非空运行时值推断，结果侧从目标字段推断。映射级 `typeHandler` 的优先级高于全局注册表。
+
 插件配置示例：
 
 ```xml
@@ -118,7 +146,7 @@ JUnit 资源锁保证相关测试即使启用并行执行，也不会同时修�
 
 ## 后续里程碑
 
-1. 类型处理器与 JDBC 类型转换
-2. 连接池和分页插件
+1. 连接池与连接复用
+2. 分页插件与数据库方言
 
 生产级能力不是本项目目标；每个里程碑会先以小型、可测试的实现解释原理。

@@ -23,9 +23,13 @@ public interface UserXmlMapper {
 
     List<User> selectByIds(@Param("ids") List<Integer> ids);
 
+    User selectWithEmailById(@Param("id") Integer id);
+
     Integer count();
 
     int insert(User user);
+
+    int insertWithEmail(User user);
 
     boolean update(User user);
 

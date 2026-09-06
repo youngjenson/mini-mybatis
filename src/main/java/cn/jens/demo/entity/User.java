@@ -1,5 +1,7 @@
 package cn.jens.demo.entity;
 
+import cn.jens.demo.type.EmailAddress;
+
 /**
  * 用户实体类
  * @author YumJens
@@ -12,6 +14,8 @@ public class User {
     private String name;
 
     private Integer age;
+
+    private EmailAddress email;
 
     public Integer getId() {
         return id;
@@ -37,12 +41,21 @@ public class User {
         this.age = age;
     }
 
+    public EmailAddress getEmail() {
+        return email;
+    }
+
+    public void setEmail(EmailAddress email) {
+        this.email = email;
+    }
+
     @Override
     public String toString() {
         return "User{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", age=" + age +
+                ", email=" + email +
                 '}';
     }
 }

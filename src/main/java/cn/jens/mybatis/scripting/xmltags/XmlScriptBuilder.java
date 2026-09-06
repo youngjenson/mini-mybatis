@@ -4,6 +4,8 @@ import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.scripting.DynamicSqlSource;
 import cn.jens.mybatis.scripting.SqlSource;
 import cn.jens.mybatis.scripting.StaticSqlSource;
+import cn.jens.mybatis.type.TypeAliasRegistry;
+import cn.jens.mybatis.type.TypeHandlerRegistry;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -17,16 +19,37 @@ public class XmlScriptBuilder {
 
     private final String resource;
 
+    private final TypeHandlerRegistry typeHandlerRegistry;
+
+    private final TypeAliasRegistry typeAliasRegistry;
+
     public XmlScriptBuilder(String resource) {
+        this(resource, new TypeHandlerRegistry(), new TypeAliasRegistry());
+    }
+
+    public XmlScriptBuilder(
+            String resource,
+            TypeHandlerRegistry typeHandlerRegistry,
+            TypeAliasRegistry typeAliasRegistry) {
         this.resource = resource;
+        this.typeHandlerRegistry = typeHandlerRegistry;
+        this.typeAliasRegistry = typeAliasRegistry;
     }
 
     public SqlSource parse(Element statement) {
         ParsedNodes parsedNodes = parseChildren(statement);
         if (!parsedNodes.dynamic()) {
-            return new StaticSqlSource(statement.getTextContent().strip());
+            return new StaticSqlSource(
+                    statement.getTextContent().strip(),
+                    typeHandlerRegistry,
+                    typeAliasRegistry
+            );
         }
-        return new DynamicSqlSource(new MixedSqlNode(parsedNodes.nodes()));
+        return new DynamicSqlSource(
+                new MixedSqlNode(parsedNodes.nodes()),
+                typeHandlerRegistry,
+                typeAliasRegistry
+        );
     }
 
     private ParsedNodes parseChildren(Element parent) {

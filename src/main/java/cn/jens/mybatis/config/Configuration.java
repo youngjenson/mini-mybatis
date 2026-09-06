@@ -19,7 +19,11 @@ import cn.jens.mybatis.mapping.SqlCommandType;
 import cn.jens.mybatis.plugin.Interceptor;
 import cn.jens.mybatis.plugin.InterceptorChain;
 import cn.jens.mybatis.scripting.BoundSql;
+import cn.jens.mybatis.scripting.StaticSqlSource;
 import cn.jens.mybatis.session.LocalCacheScope;
+import cn.jens.mybatis.type.JdbcType;
+import cn.jens.mybatis.type.TypeAliasRegistry;
+import cn.jens.mybatis.type.TypeHandlerRegistry;
 
 import javax.sql.DataSource;
 import java.lang.reflect.Method;
@@ -29,6 +33,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * mini-MyBatis 的运行时配置中心。
@@ -43,6 +48,8 @@ public class Configuration {
 
     private boolean cacheEnabled = true;
 
+    private JdbcType jdbcTypeForNull = JdbcType.OTHER;
+
     private final Map<String, MappedStatement> mappedStatements = new HashMap<>();
 
     private final Map<String, ResultMap> resultMaps = new HashMap<>();
@@ -50,6 +57,10 @@ public class Configuration {
     private final Map<String, Cache> caches = new HashMap<>();
 
     private final InterceptorChain interceptorChain = new InterceptorChain();
+
+    private final TypeAliasRegistry typeAliasRegistry = new TypeAliasRegistry();
+
+    private final TypeHandlerRegistry typeHandlerRegistry = new TypeHandlerRegistry();
 
     public DataSource getDataSource() {
         if (dataSource == null) {
@@ -76,6 +87,22 @@ public class Configuration {
 
     public void setCacheEnabled(boolean cacheEnabled) {
         this.cacheEnabled = cacheEnabled;
+    }
+
+    public JdbcType getJdbcTypeForNull() {
+        return jdbcTypeForNull;
+    }
+
+    public void setJdbcTypeForNull(JdbcType jdbcTypeForNull) {
+        this.jdbcTypeForNull = Objects.requireNonNull(jdbcTypeForNull, "jdbcTypeForNull");
+    }
+
+    public TypeAliasRegistry getTypeAliasRegistry() {
+        return typeAliasRegistry;
+    }
+
+    public TypeHandlerRegistry getTypeHandlerRegistry() {
+        return typeHandlerRegistry;
     }
 
     public void addCache(Cache cache) {
@@ -116,12 +143,16 @@ public class Configuration {
     }
 
     public ParameterHandler newParameterHandler(BoundSql boundSql) {
-        ParameterHandler parameterHandler = new DefaultParameterHandler(boundSql);
+        ParameterHandler parameterHandler = new DefaultParameterHandler(
+                boundSql,
+                typeHandlerRegistry,
+                jdbcTypeForNull
+        );
         return (ParameterHandler) interceptorChain.pluginAll(parameterHandler);
     }
 
     public ResultSetHandler newResultSetHandler() {
-        ResultSetHandler resultSetHandler = new DefaultResultSetHandler();
+        ResultSetHandler resultSetHandler = new DefaultResultSetHandler(typeHandlerRegistry);
         return (ResultSetHandler) interceptorChain.pluginAll(resultSetHandler);
     }
 
@@ -178,7 +209,15 @@ public class Configuration {
                             statementId,
                             definition.sql(),
                             resolveResultType(method, definition.commandType()),
-                            definition.commandType()
+                            definition.commandType(),
+                            null,
+                            definition.commandType() != SqlCommandType.SELECT,
+                            definition.commandType() == SqlCommandType.SELECT,
+                            new StaticSqlSource(
+                                    definition.sql(),
+                                    typeHandlerRegistry,
+                                    typeAliasRegistry
+                            )
                     )
             );
         }

@@ -6,6 +6,8 @@
         <id property="id" column="user_id"/>
         <result property="name" column="user_name"/>
         <result property="age" column="user_age"/>
+        <result property="email" column="user_email"
+                javaType="cn.jens.demo.type.EmailAddress" jdbcType="VARCHAR"/>
     </resultMap>
 
     <select id="selectList" resultMap="userResultMap">
@@ -65,9 +67,21 @@
         select count(*) from user
     </select>
 
+    <select id="selectWithEmailById" resultMap="userResultMap">
+        select id as user_id, name as user_name, age as user_age, email as user_email
+        from user
+        where id = #{id, javaType=integer, jdbcType=INTEGER}
+    </select>
+
     <insert id="insert">
         insert into user (id, name, age)
         values (#{id}, #{name}, #{age})
+    </insert>
+
+    <insert id="insertWithEmail">
+        insert into user (id, name, age, email)
+        values (#{id}, #{name}, #{age},
+                #{email, javaType=cn.jens.demo.type.EmailAddress, jdbcType=VARCHAR})
     </insert>
 
     <update id="update">

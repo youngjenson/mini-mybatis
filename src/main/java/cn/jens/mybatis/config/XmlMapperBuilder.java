@@ -8,6 +8,8 @@ import cn.jens.mybatis.mapping.ResultMapping;
 import cn.jens.mybatis.mapping.SqlCommandType;
 import cn.jens.mybatis.scripting.SqlSource;
 import cn.jens.mybatis.scripting.xmltags.XmlScriptBuilder;
+import cn.jens.mybatis.type.JdbcType;
+import cn.jens.mybatis.type.TypeHandler;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -72,10 +74,14 @@ public class XmlMapperBuilder {
                 if (!"id".equals(child.getTagName()) && !"result".equals(child.getTagName())) {
                     continue;
                 }
+                String property = requiredAttribute(child, "property", resource);
                 mappings.add(new ResultMapping(
-                        requiredAttribute(child, "property", resource),
+                        property,
                         requiredAttribute(child, "column", resource),
-                        "id".equals(child.getTagName())
+                        "id".equals(child.getTagName()),
+                        resolveMappingJavaType(child, type, property),
+                        resolveJdbcType(child),
+                        resolveTypeHandler(child)
                 ));
             }
             configuration.addResultMap(resultMapId, new ResultMap(resultMapId, type, mappings));
@@ -95,7 +101,11 @@ public class XmlMapperBuilder {
             if (sql.isBlank()) {
                 throw new PersistenceException("SQL must not be blank: " + statementId);
             }
-            SqlSource sqlSource = new XmlScriptBuilder(resource).parse(element);
+            SqlSource sqlSource = new XmlScriptBuilder(
+                    resource,
+                    configuration.getTypeHandlerRegistry(),
+                    configuration.getTypeAliasRegistry()
+            ).parse(element);
             ResultMap resultMap = resolveResultMap(element, namespace, commandType, resource);
             Class<?> resultType = resolveResultType(element, resultMap, commandType, resource);
             configuration.addMappedStatement(
@@ -202,13 +212,43 @@ public class XmlMapperBuilder {
     }
 
     private Class<?> resolveType(String typeName) {
-        return switch (typeName) {
-            case "int", "integer" -> Integer.class;
-            case "long" -> Long.class;
-            case "string" -> String.class;
-            case "boolean" -> Boolean.class;
-            default -> loadClass(typeName, "Type class not found: ");
-        };
+        return configuration.getTypeAliasRegistry().resolveAlias(typeName);
+    }
+
+    private Class<?> resolveMappingJavaType(
+            Element mapping,
+            Class<?> resultType,
+            String property) {
+        String javaType = mapping.getAttribute("javaType");
+        return javaType.isBlank()
+                ? findFieldType(resultType, property)
+                : resolveType(javaType);
+    }
+
+    private Class<?> findFieldType(Class<?> resultType, String property) {
+        Class<?> currentType = resultType;
+        while (currentType != null && currentType != Object.class) {
+            try {
+                return currentType.getDeclaredField(property).getType();
+            } catch (NoSuchFieldException ignored) {
+                currentType = currentType.getSuperclass();
+            }
+        }
+        throw new PersistenceException(
+                "Result property not found on " + resultType.getName() + ": " + property
+        );
+    }
+
+    private JdbcType resolveJdbcType(Element mapping) {
+        String jdbcType = mapping.getAttribute("jdbcType");
+        return jdbcType.isBlank() ? null : JdbcType.fromName(jdbcType);
+    }
+
+    private TypeHandler<Object> resolveTypeHandler(Element mapping) {
+        String typeHandler = mapping.getAttribute("typeHandler");
+        return typeHandler.isBlank()
+                ? null
+                : configuration.getTypeHandlerRegistry().resolveTypeHandler(typeHandler);
     }
 
     private void registerMapperInterface(String namespace) {

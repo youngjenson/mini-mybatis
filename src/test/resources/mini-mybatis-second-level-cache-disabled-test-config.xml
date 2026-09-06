@@ -4,6 +4,9 @@
         <setting name="cacheEnabled" value="false"/>
         <setting name="localCacheScope" value="SESSION"/>
     </settings>
+    <typeHandlers>
+        <typeHandler handler="cn.jens.demo.typehandler.EmailAddressTypeHandler"/>
+    </typeHandlers>
     <dataSource>
         <property name="driver" value="com.mysql.cj.jdbc.Driver"/>
         <property name="url" value="jdbc:mysql://127.0.0.1:3306/test"/>

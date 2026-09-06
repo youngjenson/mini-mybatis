@@ -4,6 +4,9 @@
         <setting name="cacheEnabled" value="true"/>
         <setting name="localCacheScope" value="SESSION"/>
     </settings>
+    <typeHandlers>
+        <typeHandler handler="cn.jens.demo.typehandler.EmailAddressTypeHandler"/>
+    </typeHandlers>
     <plugins>
         <plugin interceptor="cn.jens.mybatis.plugin.SlowSqlInterceptor">
             <property name="thresholdMillis" value="200"/>

@@ -5,7 +5,10 @@ import cn.jens.mybatis.config.Configuration;
 import cn.jens.mybatis.config.XmlMapperBuilder;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.mapping.MappedStatement;
+import cn.jens.mybatis.mapping.ResultMapping;
 import cn.jens.mybatis.mapping.SqlCommandType;
+import cn.jens.mybatis.type.JdbcType;
+import cn.jens.mybatis.type.handler.StringTypeHandler;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,7 +31,8 @@ class XmlMapperBuilderTest {
                     <cache/>
                     <resultMap id="userMap" type="%s">
                         <id property="id" column="user_id"/>
-                        <result property="name" column="user_name"/>
+                        <result property="name" column="user_name" javaType="string"
+                                jdbcType="VARCHAR" typeHandler="%s"/>
                     </resultMap>
                     <select id="selectUser" resultMap="userMap" flushCache="true">
                         select id as user_id, name as user_name from user
@@ -36,7 +41,11 @@ class XmlMapperBuilderTest {
                         select id as user_id, name as user_name from user
                     </select>
                 </mapper>
-                """.formatted(SampleMapper.class.getName(), User.class.getName());
+                """.formatted(
+                        SampleMapper.class.getName(),
+                        User.class.getName(),
+                        StringTypeHandler.class.getName()
+                );
 
         Configuration configuration = parse(xml);
         String statementId = SampleMapper.class.getName() + ".selectUser";
@@ -52,6 +61,10 @@ class XmlMapperBuilderTest {
                 SampleMapper.class.getName() + ".selectUserWithoutCache"
         ).useCache());
         assertEquals("user_name", statement.resultMap().resultMappings().get(1).column());
+        ResultMapping nameMapping = statement.resultMap().resultMappings().get(1);
+        assertEquals(String.class, nameMapping.javaType());
+        assertEquals(JdbcType.VARCHAR, nameMapping.jdbcType());
+        assertInstanceOf(StringTypeHandler.class, nameMapping.typeHandler());
     }
 
     @Test

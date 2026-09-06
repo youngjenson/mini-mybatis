@@ -4,6 +4,8 @@ import cn.jens.mybatis.datasource.DataSourceFactory;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.plugin.Interceptor;
 import cn.jens.mybatis.session.LocalCacheScope;
+import cn.jens.mybatis.type.JdbcType;
+import cn.jens.mybatis.type.TypeHandler;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -38,6 +40,7 @@ public class XmlConfigBuilder {
             Element root = document.getDocumentElement();
             Configuration configuration = new Configuration();
             parseSettings(root, configuration);
+            parseTypeHandlers(root, configuration);
             parsePlugins(root, configuration);
             parseDataSource(root, configuration);
             parseMappers(root, configuration);
@@ -127,8 +130,59 @@ public class XmlConfigBuilder {
             case "cacheEnabled" -> configuration.setCacheEnabled(
                     parseBooleanSetting(name, value)
             );
+            case "jdbcTypeForNull" -> configuration.setJdbcTypeForNull(
+                    JdbcType.fromName(value)
+            );
             default -> throw new PersistenceException("Unsupported setting: " + name);
         }
+    }
+
+    private void parseTypeHandlers(Element root, Configuration configuration) {
+        NodeList typeHandlersNodes = root.getElementsByTagName("typeHandlers");
+        if (typeHandlersNodes.getLength() == 0) {
+            return;
+        }
+
+        Element typeHandlers = (Element) typeHandlersNodes.item(0);
+        NodeList children = typeHandlers.getChildNodes();
+        for (int index = 0; index < children.getLength(); index++) {
+            Node child = children.item(index);
+            if (!(child instanceof Element typeHandler)) {
+                continue;
+            }
+            if (!"typeHandler".equals(typeHandler.getTagName())) {
+                throw new PersistenceException(
+                        "Unsupported element in <typeHandlers>: " + typeHandler.getTagName()
+                );
+            }
+            registerTypeHandler(typeHandler, configuration);
+        }
+    }
+
+    private void registerTypeHandler(Element element, Configuration configuration) {
+        String handlerClassName = element.getAttribute("handler");
+        if (handlerClassName.isBlank()) {
+            throw new PersistenceException("Type handler class must not be blank");
+        }
+        TypeHandler<Object> typeHandler = configuration.getTypeHandlerRegistry()
+                .resolveTypeHandler(handlerClassName);
+        String javaTypeName = element.getAttribute("javaType");
+        String jdbcTypeName = element.getAttribute("jdbcType");
+        if (javaTypeName.isBlank()) {
+            if (!jdbcTypeName.isBlank()) {
+                throw new PersistenceException(
+                        "typeHandler javaType is required when jdbcType is declared"
+                );
+            }
+            configuration.getTypeHandlerRegistry().register(typeHandler);
+            return;
+        }
+
+        Class<?> javaType = configuration.getTypeAliasRegistry().resolveAlias(javaTypeName);
+        JdbcType jdbcType = jdbcTypeName.isBlank()
+                ? null
+                : JdbcType.fromName(jdbcTypeName);
+        configuration.getTypeHandlerRegistry().register(javaType, jdbcType, typeHandler);
     }
 
     private void setLocalCacheScope(Configuration configuration, String value) {

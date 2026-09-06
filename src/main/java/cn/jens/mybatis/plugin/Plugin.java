@@ -31,6 +31,12 @@ public final class Plugin implements InvocationHandler {
         this.signatureMap = signatureMap;
     }
 
+    /**
+     * 创建一个代理对象。
+     * @param target 目标对象
+     * @param interceptor 拦截器
+     * @return 代理对象
+     */
     public static Object wrap(Object target, Interceptor interceptor) {
         Map<Class<?>, Set<Method>> signatureMap = getSignatureMap(interceptor);
         Class<?>[] interfaces = getMatchingInterfaces(target.getClass(), signatureMap);
