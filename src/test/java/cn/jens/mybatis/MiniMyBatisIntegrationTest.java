@@ -4,12 +4,14 @@ import cn.jens.demo.entity.User;
 import cn.jens.demo.mapper.UserMapper;
 import cn.jens.demo.mapper.UserXmlMapper;
 import cn.jens.demo.type.EmailAddress;
+import cn.jens.mybatis.datasource.PooledDataSource;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.plugin.InvocationCountingInterceptor;
 import cn.jens.mybatis.session.SqlSession;
 import cn.jens.mybatis.session.SqlSessionFactory;
 import cn.jens.mybatis.session.SqlSessionFactoryBuilder;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -56,6 +58,13 @@ class MiniMyBatisIntegrationTest {
                     "insert into user (id, name, age) "
                             + "values (1, 'Alice', 20), (2, 'Bob', 25)"
             );
+        }
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (dataSource instanceof PooledDataSource pooledDataSource) {
+            pooledDataSource.close();
         }
     }
 

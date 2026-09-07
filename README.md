@@ -2,7 +2,7 @@
 
 这是一个用于理解 MyBatis 核心原理的教学项目，不依赖 MyBatis 本体。
 
-## 当前已完成：类型处理器与 JDBC 类型转换
+## 当前已完成：连接池与连接复用
 
 ```text
 mini-mybatis-config.xml + UserXmlMapper.xml
@@ -20,11 +20,21 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
                                              TypeHandler / JdbcType
                                                           ↓
                                             PreparedStatement / JDBC
+
+JdbcTransaction → PooledConnection（逻辑连接）→ PooledDataSource
+                                                    ↓
+                                      idle / active 物理连接
 ```
 
 当前支持：
 
-- 从 XML 创建非池化 `DataSource`
+- 从 XML 创建 `UNPOOLED` 或 `POOLED` 类型的 `DataSource`
+- `PooledDataSource` 管理 active/idle 物理连接并提供只读状态快照
+- 每次借用生成独立的逻辑连接代理，`close()` 将物理连接归还池中
+- 池满时等待空闲连接，到达 `poolTimeToWait` 后抛出 `SQLTimeoutException`
+- 超过 `poolMaximumCheckoutTime` 的连接可被回收，原逻辑连接随即永久失效
+- 归还前自动回滚未提交事务、恢复 `autoCommit` 并清理 JDBC warning
+- 可配置 ping SQL；失效连接会被丢弃并按容错次数重新获取
 - `<mapper class="...">` 注解 Mapper 与 `<mapper resource="...">` XML Mapper
 - XML `<mapper namespace>` 和 `<select>/<insert>/<update>/<delete>`
 - 动态 SQL 节点树：`SqlSource`、`DynamicSqlSource`、`SqlNode`、`DynamicContext`
@@ -53,7 +63,7 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
 - 增删改受影响行数，以及 `int`、`long`、`boolean`、`void` 返回值适配
 - 默认手动提交、`commit()`、`rollback()`、关闭会话自动回滚
 - `openSession(true)` 自动提交
-- 一个 SqlSession 内复用同一个 JDBC Connection
+- 一个 SqlSession 内复用同一个逻辑连接，多个 SqlSession 可复用同一个物理连接
 - SqlSession 级一级缓存，缓存键包含语句 ID、JDBC SQL 与参数值
 - `<setting name="localCacheScope" value="SESSION|STATEMENT">`
 - DML、`commit()`、`rollback()`、`close()` 自动清空一级缓存
@@ -76,7 +86,8 @@ SqlSession → MapperProxy → Plugin(Executor) → CachingExecutor → SimpleEx
 
 测试不会 Mock JDBC：每个集成测试都会在真实 MySQL 中重建并准备 `user` 表，通过
 mini-MyBatis 执行业务路径，再使用原生 JDBC 校验提交后的最终数据。测试还覆盖 SQL
-参数绑定、防注入、执行失败后的整体回滚，以及一、二级缓存行为。
+参数绑定、防注入、执行失败后的整体回滚，以及一、二级缓存行为。连接池集成测试还会通过
+MySQL `CONNECTION_ID()` 验证不同 SqlSession 确实复用了同一个物理连接。
 
 动态 SQL 示例：
 
@@ -128,6 +139,29 @@ mini-MyBatis 执行业务路径，再使用原生 JDBC 校验提交后的最终�
 动态代理，只能拦截 `Executor`、`StatementHandler`、`ParameterHandler` 和
 `ResultSetHandler` 接口中通过 `@Signature` 声明的方法。
 
+连接池配置示例：
+
+```xml
+<dataSource type="POOLED">
+    <property name="driver" value="com.mysql.cj.jdbc.Driver"/>
+    <property name="url" value="jdbc:mysql://127.0.0.1:3306/test"/>
+    <property name="username" value="root"/>
+    <property name="password" value="root"/>
+    <property name="poolMaximumActiveConnections" value="10"/>
+    <property name="poolMaximumIdleConnections" value="5"/>
+    <property name="poolMaximumCheckoutTime" value="20000"/>
+    <property name="poolTimeToWait" value="20000"/>
+    <property name="poolMaximumLocalBadConnectionTolerance" value="3"/>
+    <property name="poolPingEnabled" value="true"/>
+    <property name="poolPingQuery" value="SELECT 1"/>
+    <property name="poolPingConnectionsNotUsedFor" value="30000"/>
+</dataSource>
+```
+
+未填写 `type` 时保持兼容，默认使用 `UNPOOLED`。时间配置的单位都是毫秒；本项目将
+`poolTimeToWait` 定义为一次获取连接的总等待上限。`PooledDataSource.close()` 会关闭全部
+物理连接并使尚未归还的逻辑连接失效，应用关闭或测试结束时应调用它。
+
 运行测试：
 
 ```bash
@@ -144,9 +178,11 @@ JUnit 资源锁保证相关测试即使启用并行执行，也不会同时修�
 当前二级缓存是便于理解原理的进程内实现，直接保存对象引用，尚未加入序列化、淘汰策略、
 容量限制和分布式一致性；不要把它直接用于生产环境。
 
+当前连接池同样以解释原理为目标：它使用单锁管理连接，没有生产连接池常见的异步建连、
+泄漏检测、指标导出和完整连接状态恢复能力。生产项目应使用成熟连接池。
+
 ## 后续里程碑
 
-1. 连接池与连接复用
-2. 分页插件与数据库方言
+1. 分页插件与数据库方言
 
 生产级能力不是本项目目标；每个里程碑会先以小型、可测试的实现解释原理。

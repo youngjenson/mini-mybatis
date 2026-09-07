@@ -225,7 +225,10 @@ public class XmlConfigBuilder {
                     property.getAttribute("value")
             );
         }
-        configuration.setDataSource(new DataSourceFactory().create(properties));
+        configuration.setDataSource(new DataSourceFactory().create(
+                dataSource.getAttribute("type"),
+                properties
+        ));
     }
 
     private void parseMappers(Element root, Configuration configuration) {

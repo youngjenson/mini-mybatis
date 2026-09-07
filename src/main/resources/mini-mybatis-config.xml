@@ -12,7 +12,7 @@
             <property name="thresholdMillis" value="200"/>
         </plugin>
     </plugins>
-    <dataSource>
+    <dataSource type="POOLED">
         <property
                 name="driver"
                 value="com.mysql.cj.jdbc.Driver"/>
@@ -25,7 +25,14 @@
         <property
                 name="password"
                 value="root"/>
-
+        <property name="poolMaximumActiveConnections" value="10"/>
+        <property name="poolMaximumIdleConnections" value="5"/>
+        <property name="poolMaximumCheckoutTime" value="20000"/>
+        <property name="poolTimeToWait" value="20000"/>
+        <property name="poolMaximumLocalBadConnectionTolerance" value="3"/>
+        <property name="poolPingEnabled" value="true"/>
+        <property name="poolPingQuery" value="SELECT 1"/>
+        <property name="poolPingConnectionsNotUsedFor" value="30000"/>
     </dataSource>
     <mappers>
         <mapper class="cn.jens.demo.mapper.UserMapper"/>

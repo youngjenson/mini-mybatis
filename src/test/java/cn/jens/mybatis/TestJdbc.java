@@ -1,7 +1,9 @@
 package cn.jens.mybatis;
 
 import cn.jens.mybatis.config.XmlConfigBuilder;
+import cn.jens.mybatis.datasource.PooledDataSource;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -37,6 +39,13 @@ class TestJdbc {
                     "create table user (id int primary key, name varchar(64), age int)"
             );
             statement.execute("insert into user values (1, 'Alice', 20), (2, 'Bob', 25)");
+        }
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (dataSource instanceof PooledDataSource pooledDataSource) {
+            pooledDataSource.close();
         }
     }
 
