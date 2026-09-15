@@ -11,5 +11,8 @@ public interface Cache {
 
     void put(CacheKey key, List<?> value);
 
+    /** 删除条目；BlockingCache 中用于释放未命中 key 的加载锁。 */
+    List<?> remove(CacheKey key);
+
     void clear();
 }

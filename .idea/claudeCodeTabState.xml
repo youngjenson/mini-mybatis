@@ -7,9 +7,9 @@
           <value>
             <TabSessionState>
               <option name="provider" value="codex" />
-              <option name="sessionId" value="01a07091-3114-7d43-87db-235edf8a8f94" />
-              <option name="cwd" value="D:\codex-pro\mybatis-demo" />
-              <option name="model" value="gpt-5.6-sol" />
+              <option name="sessionId" value="01a0a2d9-ea50-7781-887d-4fbade2b3a98" />
+              <option name="cwd" value="D:\idea-pro\mini-mybatis" />
+              <option name="model" value="gpt-6-astra" />
               <option name="permissionMode" value="bypassPermissions" />
             </TabSessionState>
           </value>

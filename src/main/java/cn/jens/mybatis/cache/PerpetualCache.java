@@ -32,6 +32,11 @@ public class PerpetualCache implements Cache {
     }
 
     @Override
+    public List<?> remove(CacheKey key) {
+        return entries.remove(key);
+    }
+
+    @Override
     public void clear() {
         entries.clear();
     }

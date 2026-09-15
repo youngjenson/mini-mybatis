@@ -22,11 +22,34 @@ public class TransactionalCacheManager {
     }
 
     public void commit() {
-        transactionalCaches.values().forEach(TransactionalCache::commit);
+        try {
+            transactionalCaches.values().forEach(TransactionalCache::commit);
+        } catch (RuntimeException | Error e) {
+            try {
+                rollback();
+            } catch (RuntimeException | Error rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        }
     }
 
     public void rollback() {
-        transactionalCaches.values().forEach(TransactionalCache::rollback);
+        RuntimeException failure = null;
+        for (TransactionalCache cache : transactionalCaches.values()) {
+            try {
+                cache.rollback();
+            } catch (RuntimeException e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
     }
 
     private TransactionalCache transactionalCache(Cache cache) {

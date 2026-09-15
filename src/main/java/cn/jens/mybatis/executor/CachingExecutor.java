@@ -88,7 +88,16 @@ public class CachingExecutor implements Executor {
 
     @Override
     public void commit() {
-        delegate.commit();
+        try {
+            delegate.commit();
+        } catch (RuntimeException | Error e) {
+            try {
+                transactionalCacheManager.rollback();
+            } catch (RuntimeException | Error rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        }
         transactionalCacheManager.commit();
     }
 

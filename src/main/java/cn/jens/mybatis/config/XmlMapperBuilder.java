@@ -1,6 +1,7 @@
 package cn.jens.mybatis.config;
 
-import cn.jens.mybatis.cache.PerpetualCache;
+import cn.jens.mybatis.cache.CacheBuilder;
+import cn.jens.mybatis.cache.EvictionPolicy;
 import cn.jens.mybatis.exception.PersistenceException;
 import cn.jens.mybatis.mapping.MappedStatement;
 import cn.jens.mybatis.mapping.ResultMap;
@@ -59,7 +60,37 @@ public class XmlMapperBuilder {
             throw new PersistenceException("Mapper can declare only one <cache>: " + resource);
         }
         if (!cacheElements.isEmpty()) {
-            configuration.addCache(new PerpetualCache(namespace));
+            Element cache = cacheElements.getFirst();
+            String eviction = cache.hasAttribute("eviction")
+                    ? cache.getAttribute("eviction").strip() : EvictionPolicy.LRU.name();
+            String size = cache.hasAttribute("size")
+                    ? cache.getAttribute("size").strip() : String.valueOf(CacheBuilder.DEFAULT_SIZE);
+            boolean blocking = cache.hasAttribute("blocking")
+                    && parseBooleanAttribute("blocking", cache.getAttribute("blocking").strip(), resource);
+            try {
+                CacheBuilder builder = new CacheBuilder(namespace)
+                        .size(Integer.parseInt(size)).eviction(EvictionPolicy.valueOf(eviction))
+                        .blocking(blocking);
+                List<Element> properties = directChildren(cache, "property");
+                boolean timeoutConfigured = false;
+                for (Element property : properties) {
+                    String name = requiredAttribute(property, "name", resource);
+                    if (!"timeout".equals(name) || !blocking || timeoutConfigured) {
+                        throw new PersistenceException("Invalid <cache> property in " + resource
+                                + ": only one timeout property is supported with blocking=true");
+                    }
+                    builder.timeout(Long.parseLong(requiredAttribute(property, "value", resource).strip()));
+                    timeoutConfigured = true;
+                }
+                configuration.addCache(builder.build());
+            } catch (IllegalArgumentException e) {
+                throw new PersistenceException(
+                        "Invalid <cache> in " + resource + ": eviction must be LRU or FIFO"
+                                + ", timeout must be a non-negative integer"
+                                + " and size must be a positive integer (eviction=" + eviction
+                                + ", size=" + size + ")", e
+                );
+            }
         }
     }
 
